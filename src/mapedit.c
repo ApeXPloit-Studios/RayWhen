@@ -82,10 +82,10 @@ static const char* textureNames[] = {
     "Tech Blue", "Rock Dark", "Brick Clay", "Metal Tile"
 };
 
-// Floor texture names
+// Floor texture names (matching game engine texture files)
 static const char* floorTextureNames[] = {
-    "Stone Floor", "Wood Floor", "Metal Floor", "Carpet", 
-    "Grass", "Sand", "Water", "Lava"
+    "Red Bricks", "Building Bricks", "Metal Tile", "Wood A", 
+    "High Tech", "Gray Rocks", "Clay Bricks", "Cross Wall"
 };
 
 static void saveMap(const char *path) {
@@ -238,15 +238,15 @@ static COLORREF tileColor(int wallType, int textureId, int floorTextureId) {
         case 0: 
             // Empty tile - show floor texture color
             switch (floorTextureId % 8) {
-                case 0: return RGB(120,120,120); // Stone Floor
-                case 1: return RGB(139,69,19);   // Wood Floor
-                case 2: return RGB(169,169,169); // Metal Floor
-                case 3: return RGB(128,0,128);   // Carpet
-                case 4: return RGB(34,139,34);   // Grass
-                case 5: return RGB(238,203,173); // Sand
-                case 6: return RGB(0,191,255);   // Water
-                case 7: return RGB(255,69,0);    // Lava
-                default: return RGB(120,120,120); // Default stone
+                case 0: return RGB(180,80,60);   // Red Bricks
+                case 1: return RGB(160,80,70);  // Building Bricks
+                case 2: return RGB(169,169,169); // Metal Tile
+                case 3: return RGB(139,69,19);   // Wood A
+                case 4: return RGB(100,100,180); // High Tech
+                case 5: return RGB(120,120,120); // Gray Rocks
+                case 6: return RGB(140,60,50);   // Clay Bricks
+                case 7: return RGB(80,80,160);  // Cross Wall
+                default: return RGB(120,120,120); // Default
             }
         default: return RGB(20,20,20);   // Fallback (dark)
     }
