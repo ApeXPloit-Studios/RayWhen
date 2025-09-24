@@ -1,0 +1,41 @@
+# OS-specific
+Thumbs.db
+Desktop.ini
+
+# IDE/editor
+.vscode/
+.vs/
+*.code-workspace
+
+# Build outputs and binaries
+*.exe
+*.dll
+*.lib
+*.exp
+*.ilk
+*.pdb
+*.obj
+*.o
+*.log
+
+# Archives
+*.zip
+*.7z
+*.tar
+*.gz
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+*.bak
+*.swp
+
+# Common build dirs
+build/
+dist/
+out/
+
+# Project-specific
+raywin.exe
+
