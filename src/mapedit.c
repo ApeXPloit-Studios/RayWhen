@@ -75,6 +75,7 @@ static int currentTexture = 0; // 0..MAX_TEXTURES-1
 static int currentFloorTexture = 0; // 0..MAX_TEXTURES-1
 static char currentFile[MAX_PATH] = "maps\\map.txt";
 static char currentFileName[MAX_PATH] = "map.txt";
+static BOOL needsRedraw = FALSE;
 
 // Texture names for dropdown
 static const char* textureNames[] = {
@@ -89,8 +90,23 @@ static const char* floorTextureNames[] = {
 };
 
 static void saveMap(const char *path) {
-    FILE *f = fopen(path, "w");
-    if (!f) return;
+    // Clean the filename by replacing spaces with underscores
+    char cleanPath[MAX_PATH];
+    strcpy(cleanPath, path);
+    for (int i = 0; cleanPath[i]; i++) {
+        if (cleanPath[i] == ' ') {
+            cleanPath[i] = '_';
+        }
+    }
+    
+    FILE *f = fopen(cleanPath, "w");
+    if (!f) {
+        // Try to show error message for debugging
+        char errorMsg[512];
+        wsprintfA(errorMsg, "Failed to save file: %s", cleanPath);
+        MessageBoxA(NULL, errorMsg, "Save Error", MB_OK | MB_ICONERROR);
+        return;
+    }
     for (int y = 0; y < MAP_H; ++y) {
         for (int x = 0; x < MAP_W; ++x) {
             fprintf(f, "%d:%d:%d ", mapData[y][x].wallType, mapData[y][x].textureId, mapData[y][x].floorTextureId);
@@ -153,7 +169,13 @@ static BOOL showLoadDialog(HWND hwnd, char *filename) {
 
 static void loadMap(const char *path) {
     FILE *f = fopen(path, "r");
-    if (!f) return;
+    if (!f) {
+        // Try to show error message for debugging
+        char errorMsg[512];
+        wsprintfA(errorMsg, "Failed to open file: %s", path);
+        MessageBoxA(NULL, errorMsg, "Load Error", MB_OK | MB_ICONERROR);
+        return;
+    }
     
     for (int y = 0; y < MAP_H; ++y) {
         for (int x = 0; x < MAP_W; ++x) {
@@ -257,6 +279,8 @@ static COLORREF tileColor(int wallType, int textureId, int floorTextureId) {
 
 static HWND hTextureCombo = NULL;
 static HWND hFloorTextureCombo = NULL;
+static HWND hWallTextureLabel = NULL;
+static HWND hFloorTextureLabel = NULL;
 
 static void calculateGridLayout(HWND hwnd, int *ox, int *oy, int *cell, int *size) {
     RECT rc; GetClientRect(hwnd, &rc);
@@ -279,18 +303,37 @@ static void calculateGridLayout(HWND hwnd, int *ox, int *oy, int *cell, int *siz
     
     // Center the grid horizontally in the full window width
     *ox = (rc.right - rc.left - *size) / 2;
-    *oy = 10;
+    *oy = 50; // Move grid down to clear the dropdowns
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_SIZE: {
-            InvalidateRect(hwnd, NULL, FALSE);
+            RECT clientRect;
+            GetClientRect(hwnd, &clientRect);
+            int clientWidth = clientRect.right - clientRect.left;
+            int clientHeight = clientRect.bottom - clientRect.top;
+            
+            // Center the controls horizontally
+            int centerX = clientWidth / 2;
+            int controlY = 10;
+            
+            // Wall texture controls
+            SetWindowPos(hWallTextureLabel, NULL, centerX - 250, controlY, 80, 20, SWP_NOZORDER);
+            SetWindowPos(hTextureCombo, NULL, centerX - 155, controlY - 2, 150, 200, SWP_NOZORDER);
+            
+            // Floor texture controls
+            SetWindowPos(hFloorTextureLabel, NULL, centerX + 20, controlY, 80, 20, SWP_NOZORDER);
+            SetWindowPos(hFloorTextureCombo, NULL, centerX + 105, controlY - 2, 150, 200, SWP_NOZORDER);
+            
+            // Clear window and redraw (this will also redraw the status text at the bottom)
+            InvalidateRect(hwnd, NULL, TRUE); // TRUE = erase background
+            UpdateWindow(hwnd); // Force immediate redraw
             break;
         }
         case WM_CREATE: {
             // Create wall texture dropdown
-            CreateWindowA("STATIC", "Wall Texture:", WS_VISIBLE|WS_CHILD, 10, 10, 80, 20, hwnd, NULL, NULL, NULL);
+            hWallTextureLabel = CreateWindowA("STATIC", "Wall Texture:", WS_VISIBLE|WS_CHILD, 10, 10, 80, 20, hwnd, NULL, NULL, NULL);
             hTextureCombo = CreateWindowA("COMBOBOX", "", WS_VISIBLE|WS_CHILD|CBS_DROPDOWNLIST|CBS_AUTOHSCROLL, 95, 8, 150, 200, hwnd, (HMENU)IDC_TEXTURE_COMBO, NULL, NULL);
             
             // Add wall texture items to dropdown
@@ -300,7 +343,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SendMessageA(hTextureCombo, CB_SETCURSEL, 0, 0); // Select first item
             
             // Create floor texture dropdown
-            CreateWindowA("STATIC", "Floor Texture:", WS_VISIBLE|WS_CHILD, 260, 10, 80, 20, hwnd, NULL, NULL, NULL);
+            hFloorTextureLabel = CreateWindowA("STATIC", "Floor Texture:", WS_VISIBLE|WS_CHILD, 260, 10, 80, 20, hwnd, NULL, NULL, NULL);
             hFloorTextureCombo = CreateWindowA("COMBOBOX", "", WS_VISIBLE|WS_CHILD|CBS_DROPDOWNLIST|CBS_AUTOHSCROLL, 345, 8, 150, 200, hwnd, (HMENU)IDC_FLOOR_TEXTURE_COMBO, NULL, NULL);
             
             // Add floor texture items to dropdown
@@ -309,7 +352,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             SendMessageA(hFloorTextureCombo, CB_SETCURSEL, 0, 0); // Select first item
             
+            // Start timer for batched redraws (every 16ms = ~60fps)
+            SetTimer(hwnd, 1, 16, NULL);
+            
             loadMap(currentFile);
+            break;
+        }
+        case WM_TIMER: {
+            if (needsRedraw) {
+                needsRedraw = FALSE;
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
             break;
         }
         case WM_LBUTTONDOWN:
@@ -324,10 +377,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             int gx = (mx - ox) / cell;
             int gy = (my - oy) / cell;
             if (gx >= 0 && gx < MAP_W && gy >= 0 && gy < MAP_H) {
-                mapData[gy][gx].wallType = currentTile;
-                mapData[gy][gx].textureId = currentTexture;
-                mapData[gy][gx].floorTextureId = currentFloorTexture;
-                InvalidateRect(hwnd, NULL, FALSE);
+                // Only update if the tile actually changes
+                if (mapData[gy][gx].wallType != currentTile || 
+                    mapData[gy][gx].textureId != currentTexture || 
+                    mapData[gy][gx].floorTextureId != currentFloorTexture) {
+                    mapData[gy][gx].wallType = currentTile;
+                    mapData[gy][gx].textureId = currentTexture;
+                    mapData[gy][gx].floorTextureId = currentFloorTexture;
+                    needsRedraw = TRUE;
+                }
             }
             break;
         }
@@ -355,17 +413,30 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (wParam >= '0' && wParam <= '6') {
                 currentTile = (int)(wParam - '0');
                 InvalidateRect(hwnd, NULL, FALSE);
+            } else if (wParam == '7') {
+                // Key 7 selects floor tiles (empty tiles)
+                currentTile = 0; // Empty tile for floor
+                InvalidateRect(hwnd, NULL, FALSE);
             } else if (wParam == 'S') {
                 char filename[MAX_PATH] = {0};
                 if (showSaveDialog(hwnd, filename)) {
-                    saveMap(filename);
-                    strcpy(currentFile, filename);
+                    // Clean the filename by replacing spaces with underscores
+                    char cleanFilename[MAX_PATH];
+                    strcpy(cleanFilename, filename);
+                    for (int i = 0; cleanFilename[i]; i++) {
+                        if (cleanFilename[i] == ' ') {
+                            cleanFilename[i] = '_';
+                        }
+                    }
+                    
+                    saveMap(cleanFilename);
+                    strcpy(currentFile, cleanFilename);
                     // Extract just the filename for display
-                    char *lastSlash = strrchr(filename, '\\');
+                    char *lastSlash = strrchr(cleanFilename, '\\');
                     if (lastSlash) {
                         strcpy(currentFileName, lastSlash + 1);
                     } else {
-                        strcpy(currentFileName, filename);
+                        strcpy(currentFileName, cleanFilename);
                     }
                     InvalidateRect(hwnd, NULL, FALSE);
                 }
@@ -416,9 +487,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // legend
             char legend[1024];
             const char* tileNames[] = {"Empty", "Wall Red", "Wall Green", "Wall Blue", "Wall Yellow", "Player", "Enemy"};
-            wsprintfA(legend, "Tile: %d (%s) | Wall: %s | Floor: %s | File: %s | 0-6: Tile Type | S: Save As  L: Load", 
+            wsprintfA(legend, "Tile: %d (%s) | Wall: %s | Floor: %s | File: %s | 0-6: Tile Type | 7: Floor | S: Save As  L: Load", 
                      currentTile, tileNames[currentTile], textureNames[currentTexture], floorTextureNames[currentFloorTexture], currentFileName);
-            TextOutA(hdc, 10, oy + size + 8, legend, (int)strlen(legend));
+            // Center the status text horizontally
+            RECT clientRect;
+            GetClientRect(hwnd, &clientRect);
+            SIZE textSize;
+            GetTextExtentPoint32A(hdc, legend, (int)strlen(legend), &textSize);
+            int textX = (clientRect.right - textSize.cx) / 2;
+            TextOutA(hdc, textX, oy + size + 8, legend, (int)strlen(legend));
 
             EndPaint(hwnd, &ps);
             break;

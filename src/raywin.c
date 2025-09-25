@@ -187,9 +187,6 @@ static const char* textureFiles[] = {
 static int loadBMPTexture(Texture* tex, const char* filename) {
     FILE* file = fopen(filename, "rb");
     if (!file) {
-        char debugMsg[256];
-        sprintf(debugMsg, "Cannot open file: %s", filename);
-        MessageBoxA(NULL, debugMsg, "BMP Debug", MB_OK);
         return 0; // File not found
     }
     
@@ -197,14 +194,12 @@ static int loadBMPTexture(Texture* tex, const char* filename) {
     unsigned char header[54];
     if (fread(header, 1, 54, file) != 54) {
         fclose(file);
-        MessageBoxA(NULL, "Cannot read BMP header", "BMP Debug", MB_OK);
         return 0;
     }
     
     // Check BMP signature
     if (header[0] != 'B' || header[1] != 'M') {
         fclose(file);
-        MessageBoxA(NULL, "Not a valid BMP file (wrong signature)", "BMP Debug", MB_OK);
         return 0;
     }
     
@@ -213,15 +208,9 @@ static int loadBMPTexture(Texture* tex, const char* filename) {
     int height = *(int*)&header[22];
     int bitsPerPixel = *(short*)&header[28];
     
-    // Debug output
-    char debugMsg[256];
-    sprintf(debugMsg, "BMP Info: %dx%d, %d bits/pixel", width, height, bitsPerPixel);
-    MessageBoxA(NULL, debugMsg, "BMP Debug", MB_OK);
     
     // Support 8-bit, 16-bit, 24-bit, and 32-bit BMPs
     if (bitsPerPixel != 8 && bitsPerPixel != 16 && bitsPerPixel != 24 && bitsPerPixel != 32) {
-        sprintf(debugMsg, "Unsupported bit depth: %d", bitsPerPixel);
-        MessageBoxA(NULL, debugMsg, "BMP Debug", MB_OK);
         fclose(file);
         return 0;
     }
@@ -236,7 +225,6 @@ static int loadBMPTexture(Texture* tex, const char* filename) {
         for (int i = 0; i < colorsUsed; i++) {
             if (fread(palette[i], 1, 4, file) != 4) {
                 fclose(file);
-                MessageBoxA(NULL, "Cannot read palette", "BMP Debug", MB_OK);
                 return 0;
             }
         }
@@ -350,7 +338,6 @@ static int loadBMPTexture(Texture* tex, const char* filename) {
     }
     
     tex->loaded = 1;
-    MessageBoxA(NULL, "BMP loaded successfully!", "BMP Debug", MB_OK);
     return 1;
 }
 
@@ -431,16 +418,8 @@ static void loadTexture(int textureId) {
     if (textures[textureId].loaded) return;
     
     // Try to load BMP first, fallback to procedural if it fails
-    if (loadBMPTexture(&textures[textureId], textureFiles[textureId])) {
-        // BMP loaded successfully
-        char debugMsg[256];
-        sprintf(debugMsg, "SUCCESS: Loaded BMP texture: %s", textureFiles[textureId]);
-        MessageBoxA(NULL, debugMsg, "Texture Debug", MB_OK);
-    } else {
+    if (!loadBMPTexture(&textures[textureId], textureFiles[textureId])) {
         // Fallback to procedural generation
-        char debugMsg[256];
-        sprintf(debugMsg, "FAILED: Could not load BMP: %s", textureFiles[textureId]);
-        MessageBoxA(NULL, debugMsg, "Texture Debug", MB_OK);
         generateTexture(&textures[textureId], textureFiles[textureId], textureId);
     }
 }
