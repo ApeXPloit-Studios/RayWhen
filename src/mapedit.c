@@ -73,8 +73,8 @@ static MapCell mapData[MAP_H][MAP_W] = {0};
 static int currentTile = 1; // 0 empty, 1..4 walls, 5 player spawn, 6 enemy spawn
 static int currentTexture = 0; // 0..MAX_TEXTURES-1
 static int currentFloorTexture = 0; // 0..MAX_TEXTURES-1
-static char currentFile[MAX_PATH] = "maps\\map.txt";
-static char currentFileName[MAX_PATH] = "map.txt";
+static char currentFile[MAX_PATH] = "maps\\map.rwm";
+static char currentFileName[MAX_PATH] = "map.rwm";
 static BOOL needsRedraw = FALSE;
 
 // Texture names for dropdown
@@ -89,6 +89,15 @@ static const char* floorTextureNames[] = {
     "High Tech", "Gray Rocks", "Clay Bricks", "Cross Wall"
 };
 
+// RayWhen Map (.rwm) format structure
+// Header: "RWM" + version (1 byte) + map width (2 bytes) + map height (2 bytes)
+// Metadata: name length (1 byte) + name + description length (1 byte) + description + author length (1 byte) + author
+// Map data: wallType (1 byte) + textureId (1 byte) + floorTextureId (1 byte) for each cell
+
+#define RWM_MAGIC "RWM"
+#define RWM_VERSION 1
+#define RWM_HEADER_SIZE 8  // "RWM" + version + width + height
+
 static void saveMap(const char *path) {
     // Clean the filename by replacing spaces with underscores
     char cleanPath[MAX_PATH];
@@ -99,20 +108,55 @@ static void saveMap(const char *path) {
         }
     }
     
-    FILE *f = fopen(cleanPath, "w");
+    FILE *f = fopen(cleanPath, "wb");
     if (!f) {
-        // Try to show error message for debugging
         char errorMsg[512];
         wsprintfA(errorMsg, "Failed to save file: %s", cleanPath);
         MessageBoxA(NULL, errorMsg, "Save Error", MB_OK | MB_ICONERROR);
         return;
     }
+    
+    // Write header
+    fwrite(RWM_MAGIC, 1, 3, f);  // "RWM"
+    fputc(RWM_VERSION, f);       // Version
+    fputc(MAP_W & 0xFF, f);       // Width low byte
+    fputc((MAP_W >> 8) & 0xFF, f); // Width high byte
+    fputc(MAP_H & 0xFF, f);       // Height low byte
+    fputc((MAP_H >> 8) & 0xFF, f); // Height high byte
+    
+    // Write metadata
+    char mapName[256] = "Untitled Map";
+    char mapDesc[512] = "A RayWhen map";
+    char mapAuthor[256] = "Unknown";
+    
+    // Extract filename without extension for map name
+    char *lastSlash = strrchr(cleanPath, '\\');
+    char *filename = lastSlash ? lastSlash + 1 : cleanPath;
+    char *ext = strstr(filename, ".rwm");
+    if (ext) *ext = '\0';
+    strcpy(mapName, filename);
+    
+    // Write name
+    fputc((unsigned char)strlen(mapName), f);
+    fwrite(mapName, 1, strlen(mapName), f);
+    
+    // Write description
+    fputc((unsigned char)strlen(mapDesc), f);
+    fwrite(mapDesc, 1, strlen(mapDesc), f);
+    
+    // Write author
+    fputc((unsigned char)strlen(mapAuthor), f);
+    fwrite(mapAuthor, 1, strlen(mapAuthor), f);
+    
+    // Write map data
     for (int y = 0; y < MAP_H; ++y) {
         for (int x = 0; x < MAP_W; ++x) {
-            fprintf(f, "%d:%d:%d ", mapData[y][x].wallType, mapData[y][x].textureId, mapData[y][x].floorTextureId);
+            fputc(mapData[y][x].wallType, f);
+            fputc(mapData[y][x].textureId, f);
+            fputc(mapData[y][x].floorTextureId, f);
         }
-        fprintf(f, "\n");
     }
+    
     fclose(f);
 }
 
@@ -124,7 +168,7 @@ static BOOL showSaveDialog(HWND hwnd, char *filename) {
     // Initialize the filename with current filename (without extension)
     char baseName[MAX_PATH] = {0};
     strcpy(baseName, currentFileName);
-    char *ext = strstr(baseName, ".txt");
+    char *ext = strstr(baseName, ".rwm");
     if (ext) *ext = '\0';
     strcpy(fileBuffer, baseName);
     
@@ -132,10 +176,10 @@ static BOOL showSaveDialog(HWND hwnd, char *filename) {
     ofn.hwndOwner = hwnd;
     ofn.lpstrFile = fileBuffer;
     ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrFilter = "Map Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFilter = "RayWhen Maps (*.rwm)\0*.rwm\0All Files (*.*)\0*.*\0";
     ofn.nFilterIndex = 1;
-    ofn.lpstrTitle = "Save Map As";
-    ofn.lpstrDefExt = "txt";
+    ofn.lpstrTitle = "Save RayWhen Map";
+    ofn.lpstrDefExt = "rwm";
     ofn.lpstrInitialDir = "maps";
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     
@@ -154,9 +198,9 @@ static BOOL showLoadDialog(HWND hwnd, char *filename) {
     ofn.hwndOwner = hwnd;
     ofn.lpstrFile = fileBuffer;
     ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrFilter = "Map Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFilter = "RayWhen Maps (*.rwm)\0*.rwm\0All Files (*.*)\0*.*\0";
     ofn.nFilterIndex = 1;
-    ofn.lpstrTitle = "Load Map";
+    ofn.lpstrTitle = "Load RayWhen Map";
     ofn.lpstrInitialDir = "maps";
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     
@@ -168,38 +212,64 @@ static BOOL showLoadDialog(HWND hwnd, char *filename) {
 }
 
 static void loadMap(const char *path) {
-    FILE *f = fopen(path, "r");
+    FILE *f = fopen(path, "rb");
     if (!f) {
-        // Try to show error message for debugging
         char errorMsg[512];
         wsprintfA(errorMsg, "Failed to open file: %s", path);
         MessageBoxA(NULL, errorMsg, "Load Error", MB_OK | MB_ICONERROR);
         return;
     }
     
+    // Read and verify header
+    char magic[4] = {0};
+    fread(magic, 1, 3, f);
+    if (strcmp(magic, RWM_MAGIC) != 0) {
+        fclose(f);
+        MessageBoxA(NULL, "Invalid RayWhen Map file format", "Load Error", MB_OK | MB_ICONERROR);
+        return;
+    }
+    
+    int version = fgetc(f);
+    if (version != RWM_VERSION) {
+        fclose(f);
+        MessageBoxA(NULL, "Unsupported RayWhen Map version", "Load Error", MB_OK | MB_ICONERROR);
+        return;
+    }
+    
+    int mapWidth = fgetc(f) | (fgetc(f) << 8);
+    int mapHeight = fgetc(f) | (fgetc(f) << 8);
+    
+    if (mapWidth != MAP_W || mapHeight != MAP_H) {
+        fclose(f);
+        MessageBoxA(NULL, "Map dimensions don't match editor", "Load Error", MB_OK | MB_ICONERROR);
+        return;
+    }
+    
+    // Read metadata
+    int nameLen = fgetc(f);
+    char mapName[256] = {0};
+    if (nameLen > 0 && nameLen < 256) {
+        fread(mapName, 1, nameLen, f);
+    }
+    
+    int descLen = fgetc(f);
+    char mapDesc[512] = {0};
+    if (descLen > 0 && descLen < 512) {
+        fread(mapDesc, 1, descLen, f);
+    }
+    
+    int authorLen = fgetc(f);
+    char mapAuthor[256] = {0};
+    if (authorLen > 0 && authorLen < 256) {
+        fread(mapAuthor, 1, authorLen, f);
+    }
+    
+    // Read map data
     for (int y = 0; y < MAP_H; ++y) {
         for (int x = 0; x < MAP_W; ++x) {
-            int wallType = 0;
-            int textureId = 0;
-            int floorTextureId = 0;
-            
-            // Try to read wallType:textureId:floorTextureId format first
-            if (fscanf(f, "%d:%d:%d", &wallType, &textureId, &floorTextureId) == 3) {
-                // New format with floor texture info
-            } else {
-                // Try old format wallType:textureId
-                fseek(f, -1, SEEK_CUR); // Go back one character
-                if (fscanf(f, "%d:%d", &wallType, &textureId) == 2) {
-                    floorTextureId = 0; // Default floor texture
-                } else {
-                    // Try oldest format (just number)
-                    fseek(f, -1, SEEK_CUR); // Go back one character
-                    if (fscanf(f, "%d", &wallType) == 1) {
-                        textureId = (wallType > 0) ? (wallType - 1) % MAX_TEXTURES : 0;
-                        floorTextureId = 0; // Default floor texture
-                    }
-                }
-            }
+            int wallType = fgetc(f);
+            int textureId = fgetc(f);
+            int floorTextureId = fgetc(f);
             
             // Clamp values
             if (wallType < 0) wallType = 0;
@@ -214,6 +284,7 @@ static void loadMap(const char *path) {
             mapData[y][x].floorTextureId = floorTextureId;
         }
     }
+    
     fclose(f);
 }
 

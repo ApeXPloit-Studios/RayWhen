@@ -52,7 +52,7 @@ tcc src\launcher.c -o dist\launcher.exe -luser32 -lgdi32
 echo === Compiling Map Editor ===
 if not exist "src\mapedit.c" (
     echo Error: src\mapedit.c not found!
-    pause
+    pauseqqqqqqqqqqqqq
     exit /b 1
 )
 tcc src\mapedit.c -o dist\mapedit.exe -luser32 -lgdi32 -lcomdlg32

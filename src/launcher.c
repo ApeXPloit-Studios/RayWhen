@@ -28,7 +28,9 @@ static void addItem(HWND combo, const char *text, int value) {
 static void scanMapsDirectory() {
     numMaps = 0;
     WIN32_FIND_DATAA findData;
-    HANDLE hFind = FindFirstFileA("maps\\*.txt", &findData);
+    
+    // First scan for .rwm files (new format)
+    HANDLE hFind = FindFirstFileA("maps\\*.rwm", &findData);
     
     if (hFind != INVALID_HANDLE_VALUE) {
         do {
@@ -41,9 +43,25 @@ static void scanMapsDirectory() {
         FindClose(hFind);
     }
     
+    // If no .rwm files found, scan for .txt files (backward compatibility)
+    if (numMaps == 0) {
+        hFind = FindFirstFileA("maps\\*.txt", &findData);
+        
+        if (hFind != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                    strcpy(mapFiles[numMaps], findData.cFileName);
+                    numMaps++;
+                    if (numMaps >= 32) break; // Prevent overflow
+                }
+            } while (FindNextFileA(hFind, &findData));
+            FindClose(hFind);
+        }
+    }
+    
     // Fallback if no maps found
     if (numMaps == 0) {
-        strcpy(mapFiles[0], "map.txt");
+        strcpy(mapFiles[0], "map.rwm");
         numMaps = 1;
     }
 }

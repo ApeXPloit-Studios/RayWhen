@@ -424,82 +424,182 @@ static void loadTexture(int textureId) {
     }
 }
 
+// RayWhen Map (.rwm) format structure
+// Header: "RWM" + version (1 byte) + map width (2 bytes) + map height (2 bytes)
+// Metadata: name length (1 byte) + name + description length (1 byte) + description + author length (1 byte) + author
+// Map data: wallType (1 byte) + textureId (1 byte) + floorTextureId (1 byte) for each cell
+
+#define RWM_MAGIC "RWM"
+#define RWM_VERSION 1
+#define RWM_HEADER_SIZE 8  // "RWM" + version + width + height
+
 static int loadMapFromFile(const char *path) {
     if (!path) return 0;
-    FILE *f = fopen(path, "r");
-    if (!f) return 0;
-    int ok = 1;
     
-    // Reset enemies
-    numEnemies = 0;
-    for (int i = 0; i < MAX_ENEMIES; i++) {
-        enemies[i].alive = 0;
-    }
-    
-    for (int y = 0; y < MAP_HEIGHT && ok; ++y) {
-        for (int x = 0; x < MAP_WIDTH && ok; ++x) {
-            int wallType = 0;
-            int textureId = 0;
-            int floorTextureId = 0;
-            
-            // Try to read wallType:textureId:floorTextureId format first
-            if (fscanf(f, "%d:%d:%d", &wallType, &textureId, &floorTextureId) == 3) {
-                // New format with floor texture info
-            } else {
-                // Try old format wallType:textureId
-                fseek(f, -1, SEEK_CUR); // Go back one character
-                if (fscanf(f, "%d:%d", &wallType, &textureId) == 2) {
-                    floorTextureId = 0; // Default floor texture
-                } else {
-                    // Try oldest format (just number)
-                    fseek(f, -1, SEEK_CUR); // Go back one character
-                    if (fscanf(f, "%d", &wallType) == 1) {
-                        textureId = (wallType > 0) ? (wallType - 1) % 8 : 0;
-                        floorTextureId = 0; // Default floor texture
-                    } else {
-                        wallType = 0;
-                        textureId = 0;
-                        floorTextureId = 0;
+    // Check file extension to determine format
+    char *ext = strrchr(path, '.');
+    if (ext && strcmp(ext, ".rwm") == 0) {
+        // Load new .rwm format
+        FILE *f = fopen(path, "rb");
+        if (!f) return 0;
+        
+        // Read and verify header
+        char magic[4] = {0};
+        fread(magic, 1, 3, f);
+        if (strcmp(magic, RWM_MAGIC) != 0) {
+            fclose(f);
+            return 0;
+        }
+        
+        int version = fgetc(f);
+        if (version != RWM_VERSION) {
+            fclose(f);
+            return 0;
+        }
+        
+        int mapWidth = fgetc(f) | (fgetc(f) << 8);
+        int mapHeight = fgetc(f) | (fgetc(f) << 8);
+        
+        if (mapWidth != MAP_WIDTH || mapHeight != MAP_HEIGHT) {
+            fclose(f);
+            return 0;
+        }
+        
+        // Read metadata (skip for now)
+        int nameLen = fgetc(f);
+        fseek(f, nameLen, SEEK_CUR);
+        int descLen = fgetc(f);
+        fseek(f, descLen, SEEK_CUR);
+        int authorLen = fgetc(f);
+        fseek(f, authorLen, SEEK_CUR);
+        
+        // Reset enemies
+        numEnemies = 0;
+        for (int i = 0; i < MAX_ENEMIES; i++) {
+            enemies[i].alive = 0;
+        }
+        
+        // Read map data
+        for (int y = 0; y < MAP_HEIGHT; ++y) {
+            for (int x = 0; x < MAP_WIDTH; ++x) {
+                int wallType = fgetc(f);
+                int textureId = fgetc(f);
+                int floorTextureId = fgetc(f);
+                
+                // Clamp values
+                if (wallType < 0) wallType = 0;
+                if (wallType > 6) wallType = 6;
+                if (textureId < 0) textureId = 0;
+                if (textureId >= 8) textureId = 0;
+                if (floorTextureId < 0) floorTextureId = 0;
+                if (floorTextureId >= 8) floorTextureId = 0;
+                
+                if (wallType == 5) {
+                    // Player spawn - set player position
+                    playerX = x + 0.5;
+                    playerY = y + 0.5;
+                    map[y][x] = 0; // Make it walkable
+                } else if (wallType == 6) {
+                    // Enemy spawn - add enemy
+                    if (numEnemies < MAX_ENEMIES) {
+                        enemies[numEnemies].x = x + 0.5;
+                        enemies[numEnemies].y = y + 0.5;
+                        enemies[numEnemies].radius = 0.3;
+                        enemies[numEnemies].health = 1;
+                        enemies[numEnemies].alive = 1;
+                        numEnemies++;
                     }
+                    map[y][x] = 0; // Make it walkable
+                } else {
+                    map[y][x] = wallType;
+                    mapTextures[y][x] = textureId;
+                    mapFloorTextures[y][x] = floorTextureId;
+                    // Load textures if not already loaded
+                    loadTexture(textureId);
+                    loadTexture(floorTextureId);
                 }
-            }
-            
-            // Clamp values
-            if (wallType < 0) wallType = 0;
-            if (wallType > 6) wallType = 6;
-            if (textureId < 0) textureId = 0;
-            if (textureId >= 8) textureId = 0;
-            if (floorTextureId < 0) floorTextureId = 0;
-            if (floorTextureId >= 8) floorTextureId = 0;
-            
-            if (wallType == 5) {
-                // Player spawn - set player position
-                playerX = x + 0.5;
-                playerY = y + 0.5;
-                map[y][x] = 0; // Make it walkable
-            } else if (wallType == 6) {
-                // Enemy spawn - add enemy
-                if (numEnemies < MAX_ENEMIES) {
-                    enemies[numEnemies].x = x + 0.5;
-                    enemies[numEnemies].y = y + 0.5;
-                    enemies[numEnemies].radius = 0.3;
-                    enemies[numEnemies].health = 1;
-                    enemies[numEnemies].alive = 1;
-                    numEnemies++;
-                }
-                map[y][x] = 0; // Make it walkable
-            } else {
-                map[y][x] = wallType;
-                mapTextures[y][x] = textureId;
-                mapFloorTextures[y][x] = floorTextureId;
-                // Load textures if not already loaded
-                loadTexture(textureId);
-                loadTexture(floorTextureId);
             }
         }
+        
+        fclose(f);
+        return 1;
+    } else {
+        // Load old .txt format for backward compatibility
+        FILE *f = fopen(path, "r");
+        if (!f) return 0;
+        int ok = 1;
+        
+        // Reset enemies
+        numEnemies = 0;
+        for (int i = 0; i < MAX_ENEMIES; i++) {
+            enemies[i].alive = 0;
+        }
+        
+        for (int y = 0; y < MAP_HEIGHT && ok; ++y) {
+            for (int x = 0; x < MAP_WIDTH && ok; ++x) {
+                int wallType = 0;
+                int textureId = 0;
+                int floorTextureId = 0;
+                
+                // Try to read wallType:textureId:floorTextureId format first
+                if (fscanf(f, "%d:%d:%d", &wallType, &textureId, &floorTextureId) == 3) {
+                    // New format with floor texture info
+                } else {
+                    // Try old format wallType:textureId
+                    fseek(f, -1, SEEK_CUR); // Go back one character
+                    if (fscanf(f, "%d:%d", &wallType, &textureId) == 2) {
+                        floorTextureId = 0; // Default floor texture
+                    } else {
+                        // Try oldest format (just number)
+                        fseek(f, -1, SEEK_CUR); // Go back one character
+                        if (fscanf(f, "%d", &wallType) == 1) {
+                            textureId = (wallType > 0) ? (wallType - 1) % 8 : 0;
+                            floorTextureId = 0; // Default floor texture
+                        } else {
+                            wallType = 0;
+                            textureId = 0;
+                            floorTextureId = 0;
+                        }
+                    }
+                }
+                
+                // Clamp values
+                if (wallType < 0) wallType = 0;
+                if (wallType > 6) wallType = 6;
+                if (textureId < 0) textureId = 0;
+                if (textureId >= 8) textureId = 0;
+                if (floorTextureId < 0) floorTextureId = 0;
+                if (floorTextureId >= 8) floorTextureId = 0;
+                
+                if (wallType == 5) {
+                    // Player spawn - set player position
+                    playerX = x + 0.5;
+                    playerY = y + 0.5;
+                    map[y][x] = 0; // Make it walkable
+                } else if (wallType == 6) {
+                    // Enemy spawn - add enemy
+                    if (numEnemies < MAX_ENEMIES) {
+                        enemies[numEnemies].x = x + 0.5;
+                        enemies[numEnemies].y = y + 0.5;
+                        enemies[numEnemies].radius = 0.3;
+                        enemies[numEnemies].health = 1;
+                        enemies[numEnemies].alive = 1;
+                        numEnemies++;
+                    }
+                    map[y][x] = 0; // Make it walkable
+                } else {
+                    map[y][x] = wallType;
+                    mapTextures[y][x] = textureId;
+                    mapFloorTextures[y][x] = floorTextureId;
+                    // Load textures if not already loaded
+                    loadTexture(textureId);
+                    loadTexture(floorTextureId);
+                }
+            }
+        }
+        fclose(f);
+        return ok;
     }
-    fclose(f);
-    return ok;
 }
 
 // Command-line parsing for launcher options
