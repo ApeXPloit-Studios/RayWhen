@@ -55,7 +55,23 @@ static void addItem(HWND combo, const char *text, int value) {
 
 // Simple JSON-like settings file functions
 static void saveSettings() {
-    FILE *file = fopen("src\\launcher_settings.json", "w");
+    // Get AppData\Roaming path using environment variable
+    char appDataPath[MAX_PATH];
+    char settingsPath[MAX_PATH];
+    
+    if (GetEnvironmentVariableA("APPDATA", appDataPath, MAX_PATH) > 0) {
+        // Create RayWhen directory if it doesn't exist
+        wsprintfA(settingsPath, "%s\\RayWhen", appDataPath);
+        CreateDirectoryA(settingsPath, NULL);
+        
+        // Full path to settings file
+        wsprintfA(settingsPath, "%s\\RayWhen\\launcher_settings.json", appDataPath);
+    } else {
+        // Fallback to current directory
+        strcpy(settingsPath, "launcher_settings.json");
+    }
+    
+    FILE *file = fopen(settingsPath, "w");
     if (!file) return;
     
     fprintf(file, "{\n");
@@ -72,7 +88,19 @@ static void saveSettings() {
 }
 
 static void loadSettings() {
-    FILE *file = fopen("src\\launcher_settings.json", "r");
+    // Get AppData\Roaming path using environment variable
+    char appDataPath[MAX_PATH];
+    char settingsPath[MAX_PATH];
+    
+    if (GetEnvironmentVariableA("APPDATA", appDataPath, MAX_PATH) > 0) {
+        // Full path to settings file
+        wsprintfA(settingsPath, "%s\\RayWhen\\launcher_settings.json", appDataPath);
+    } else {
+        // Fallback to current directory
+        strcpy(settingsPath, "launcher_settings.json");
+    }
+    
+    FILE *file = fopen(settingsPath, "r");
     if (!file) return;
     
     char line[256];
@@ -114,8 +142,28 @@ static void scanMapsDirectory() {
     numMaps = 0;
     WIN32_FIND_DATAA findData;
     
+    // Get executable directory and look for maps relative to it
+    char exePath[MAX_PATH];
+    char mapsPath[MAX_PATH];
+    GetModuleFileNameA(NULL, exePath, MAX_PATH);
+    
+    // Find the last backslash and remove the executable name
+    char* lastSlash = strrchr(exePath, '\\');
+    if (lastSlash) {
+        *lastSlash = '\0';
+        // If we're in dist folder, maps are in maps subfolder
+        if (strstr(exePath, "\\dist")) {
+            wsprintfA(mapsPath, "%s\\maps\\*.rwm", exePath);
+        } else {
+            // If we're in project root, maps are in maps subfolder
+            wsprintfA(mapsPath, "%s\\maps\\*.rwm", exePath);
+        }
+    } else {
+        strcpy(mapsPath, "maps\\*.rwm");
+    }
+    
     // First scan for .rwm files (new format)
-    HANDLE hFind = FindFirstFileA("maps\\*.rwm", &findData);
+    HANDLE hFind = FindFirstFileA(mapsPath, &findData);
     
     if (hFind != INVALID_HANDLE_VALUE) {
         do {
@@ -130,7 +178,13 @@ static void scanMapsDirectory() {
     
     // If no .rwm files found, scan for .txt files (backward compatibility)
     if (numMaps == 0) {
-        hFind = FindFirstFileA("maps\\*.txt", &findData);
+        // Update mapsPath for .txt files
+        if (strstr(exePath, "\\dist")) {
+            wsprintfA(mapsPath, "%s\\maps\\*.txt", exePath);
+        } else {
+            wsprintfA(mapsPath, "%s\\maps\\*.txt", exePath);
+        }
+        hFind = FindFirstFileA(mapsPath, &findData);
         
         if (hFind != INVALID_HANDLE_VALUE) {
             do {
@@ -272,21 +326,47 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
                 char cmd[512];
                 const char* rendererFlag = ""; // No renderer flag needed
+                
+                // Get executable directory to determine correct paths
+                char exePath[MAX_PATH];
+                char gameExePath[MAX_PATH];
+                char mapPath[MAX_PATH];
+                GetModuleFileNameA(NULL, exePath, MAX_PATH);
+                
+                // Find the last backslash and remove the executable name
+                char* lastSlash = strrchr(exePath, '\\');
+                if (lastSlash) {
+                    *lastSlash = '\0';
+                    if (strstr(exePath, "\\dist")) {
+                        // We're in dist folder, game is in same folder
+                        wsprintfA(gameExePath, "%s\\raywin.exe", exePath);
+                        wsprintfA(mapPath, "maps\\%s", selectedMapFile);
+                    } else {
+                        // We're in project root, game is in dist folder
+                        wsprintfA(gameExePath, "%s\\dist\\raywin.exe", exePath);
+                        wsprintfA(mapPath, "maps\\%s", selectedMapFile);
+                    }
+                } else {
+                    strcpy(gameExePath, ".\\dist\\raywin.exe");
+                    wsprintfA(mapPath, "maps\\%s", selectedMapFile);
+                }
+                
                 // Always pass an explicit perf flag so the game doesn't auto-override
                 if (strlen(selectedMapFile) > 0) {
-                    wsprintfA(cmd, ".\\dist\\raywin.exe -map maps\\%s -w %d -h %d -fps %d %s %s %s", selectedMapFile, w, h, fps, m ? "-mouselook" : "", p ? "-perf" : "--no-perf", f ? "-fullscreen" : "");
+                    wsprintfA(cmd, "\"%s\" -map %s -w %d -h %d -fps %d %s %s %s", gameExePath, mapPath, w, h, fps, m ? "-mouselook" : "", p ? "-perf" : "--no-perf", f ? "-fullscreen" : "");
                 } else {
-                    wsprintfA(cmd, ".\\dist\\raywin.exe -w %d -h %d -fps %d %s %s %s", w, h, fps, m ? "-mouselook" : "", p ? "-perf" : "--no-perf", f ? "-fullscreen" : "");
+                    wsprintfA(cmd, "\"%s\" -w %d -h %d -fps %d %s %s %s", gameExePath, w, h, fps, m ? "-mouselook" : "", p ? "-perf" : "--no-perf", f ? "-fullscreen" : "");
                 }
 
                 STARTUPINFOA si; PROCESS_INFORMATION pi;
                 ZeroMemory(&si, sizeof(si));
                 ZeroMemory(&pi, sizeof(pi));
                 si.cb = sizeof(si);
-                // Get current directory to pass as working directory
-                char currentDir[MAX_PATH];
-                GetCurrentDirectoryA(MAX_PATH, currentDir);
-                BOOL ok = CreateProcessA(NULL, cmd, NULL, NULL, FALSE, 0, NULL, currentDir, &si, &pi);
+                // Use executable directory as working directory
+                char workingDir[MAX_PATH];
+                strcpy(workingDir, exePath);
+                
+                BOOL ok = CreateProcessA(NULL, cmd, NULL, NULL, FALSE, 0, NULL, workingDir, &si, &pi);
                 if (ok) {
                     CloseHandle(pi.hThread);
                     CloseHandle(pi.hProcess);
@@ -296,7 +376,32 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
             } else if (LOWORD(wParam) == IDC_EDITMAP) {
                 STARTUPINFOA si; PROCESS_INFORMATION pi; ZeroMemory(&si, sizeof(si)); ZeroMemory(&pi, sizeof(pi)); si.cb = sizeof(si);
-                BOOL ok = CreateProcessA(NULL, "dist\\mapedit.exe", NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
+                
+                // Get executable directory and determine mapedit path
+                char exePath2[MAX_PATH];
+                char mapeditPath[MAX_PATH];
+                char workingDir[MAX_PATH];
+                GetModuleFileNameA(NULL, exePath2, MAX_PATH);
+                
+                // Find the last backslash and remove the executable name
+                char* lastSlash2 = strrchr(exePath2, '\\');
+                if (lastSlash2) {
+                    *lastSlash2 = '\0';
+                    strcpy(workingDir, exePath2);
+                    
+                    if (strstr(exePath2, "\\dist")) {
+                        // We're in dist folder, mapedit is in same folder
+                        wsprintfA(mapeditPath, "%s\\mapedit.exe", exePath2);
+                    } else {
+                        // We're in project root, mapedit is in dist folder
+                        wsprintfA(mapeditPath, "%s\\dist\\mapedit.exe", exePath2);
+                    }
+                } else {
+                    strcpy(mapeditPath, "dist\\mapedit.exe");
+                    GetCurrentDirectoryA(MAX_PATH, workingDir);
+                }
+                
+                BOOL ok = CreateProcessA(NULL, mapeditPath, NULL, NULL, FALSE, 0, NULL, workingDir, &si, &pi);
                 if (ok) { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); }
             } else if (LOWORD(wParam) == IDC_MAPFILE) {
                 // Refresh maps list

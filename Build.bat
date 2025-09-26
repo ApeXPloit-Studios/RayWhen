@@ -5,6 +5,15 @@ if not exist "src" mkdir src
 if not exist "dist" mkdir dist
 if not exist "dist\maps" mkdir dist\maps
 echo Directories ready!
+
+echo === Copying Maps to Dist ===
+if exist "maps\*.rwm" copy "maps\*.rwm" "dist\maps\"
+if exist "maps\*.txt" copy "maps\*.txt" "dist\maps\"
+echo Maps copied!
+
+echo === Copying Assets to Dist ===
+if exist "assets" xcopy "assets" "dist\assets\" /E /I /Y
+echo Assets copied!
 echo.
 
 echo === Compiler Selection ===
