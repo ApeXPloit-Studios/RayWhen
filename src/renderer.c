@@ -3,7 +3,6 @@
 #include "map.h"
 #include "player.h"
 #include "enemy.h"
-#include "dx11_renderer.h"
 
 // External wallColors from texture.c
 extern COLORREF wallColors[];
@@ -114,15 +113,7 @@ RayResult castRay(double angle) {
 }
 
 void renderScene(HDC hdc) {
-    // Dispatch to appropriate renderer
-    if (currentRenderer == RENDERER_DX11) {
-        renderSceneDX11(GetParent(hdc));
-        // If DirectX 11 renderer returns without rendering,
-        // fall back to software renderer to avoid black screen
-        // Continue with software renderer below
-    }
-    
-    // Software renderer (existing code)
+    // Software renderer
     // Fast clear sky/floor directly into backPixels
     if (!backPixels) return;
     const uint32_t sky = colorref_to_bgra(RGB(135, 206, 235));

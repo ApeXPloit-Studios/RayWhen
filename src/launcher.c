@@ -11,7 +11,6 @@
 #define IDC_MAPFILE  1007
 #define IDC_MAPCOMBO 1008
 #define IDC_FPS     1009
-#define IDC_RENDERER 1010
 
 static const int kResolutions[][2] = {
     {640, 480}, {800, 600}, {1024, 768}, {1280, 720}, {1280, 800}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3840, 2160}
@@ -19,9 +18,9 @@ static const int kResolutions[][2] = {
 
 static const int kFPSOptions[] = {30, 60, 90, 120, 144};
 
-static const char* kRendererOptions[] = {"Software", "DirectX 11"};
+static const char* kRendererOptions[] = {"Software"};
 
-static HWND hWidthCombo, hHeightCombo, hMouseCheck, hPerfCheck, hPlayBtn, hEditBtn, hMapFileBtn, hMapCombo, hFPSCombo, hRendererCombo;
+static HWND hWidthCombo, hHeightCombo, hMouseCheck, hPerfCheck, hPlayBtn, hEditBtn, hMapFileBtn, hMapCombo, hFPSCombo;
 static char selectedMapFile[MAX_PATH] = "";
 static char mapFiles[32][MAX_PATH];
 static int numMaps = 0;
@@ -99,8 +98,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             hHeightCombo = CreateWindowA("COMBOBOX", "", WS_VISIBLE|WS_CHILD|CBS_DROPDOWNLIST, 80, 80, 120, 200, hwnd, (HMENU)IDC_HEIGHT, NULL, NULL);
             CreateWindowA("STATIC", "FPS Target:", WS_VISIBLE|WS_CHILD, 20, 110, 60, 20, hwnd, NULL, NULL, NULL);
             hFPSCombo = CreateWindowA("COMBOBOX", "", WS_VISIBLE|WS_CHILD|CBS_DROPDOWNLIST, 80, 110, 120, 200, hwnd, (HMENU)IDC_FPS, NULL, NULL);
-            CreateWindowA("STATIC", "Renderer:", WS_VISIBLE|WS_CHILD, 20, 140, 60, 20, hwnd, NULL, NULL, NULL);
-            hRendererCombo = CreateWindowA("COMBOBOX", "", WS_VISIBLE|WS_CHILD|CBS_DROPDOWNLIST, 80, 140, 120, 200, hwnd, (HMENU)IDC_RENDERER, NULL, NULL);
             CreateWindowA("STATIC", "Map:", WS_VISIBLE|WS_CHILD, 20, 170, 60, 20, hwnd, NULL, NULL, NULL);
             hMapCombo = CreateWindowA("COMBOBOX", "", WS_VISIBLE|WS_CHILD|CBS_DROPDOWNLIST, 80, 170, 120, 200, hwnd, (HMENU)IDC_MAPCOMBO, NULL, NULL);
             hMouseCheck = CreateWindowA("BUTTON", "Enable Mouse Look", WS_VISIBLE|WS_CHILD|BS_AUTOCHECKBOX, 20, 205, 180, 22, hwnd, (HMENU)IDC_MOUSE, NULL, NULL);
@@ -126,11 +123,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             SendMessageA(hFPSCombo, CB_SETCURSEL, 1, 0); // 60 FPS default
             
-            // Add renderer options
-            for (int i = 0; i < (int)(sizeof(kRendererOptions)/sizeof(kRendererOptions[0])); ++i) {
-                addItem(hRendererCombo, kRendererOptions[i], i);
-            }
-            SendMessageA(hRendererCombo, CB_SETCURSEL, 0, 0); // Software default
             
             // Scan and populate maps
             scanMapsDirectory();
@@ -142,17 +134,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 int w = getSelectedValue(hWidthCombo);
                 int h = getSelectedValue(hHeightCombo);
                 int fps = getSelectedValue(hFPSCombo);
-                int renderer = getSelectedValue(hRendererCombo);
+                int renderer = 0; // Always software
                 int m = (int)SendMessageA(hMouseCheck, BM_GETCHECK, 0, 0);
                 int p = (int)SendMessageA(hPerfCheck,  BM_GETCHECK, 0, 0);
 
                 char cmd[512];
-                const char* rendererFlag = (renderer == 1) ? "-renderer dx11" : "-renderer software";
+                const char* rendererFlag = ""; // No renderer flag needed
                 // Always pass an explicit perf flag so the game doesn't auto-override
                 if (strlen(selectedMapFile) > 0) {
-                    wsprintfA(cmd, ".\\dist\\raywin.exe -map maps\\%s -w %d -h %d -fps %d %s %s %s", selectedMapFile, w, h, fps, rendererFlag, m ? "-mouselook" : "", p ? "-perf" : "--no-perf");
+                    wsprintfA(cmd, ".\\dist\\raywin.exe -map maps\\%s -w %d -h %d -fps %d %s %s", selectedMapFile, w, h, fps, m ? "-mouselook" : "", p ? "-perf" : "--no-perf");
                 } else {
-                    wsprintfA(cmd, ".\\dist\\raywin.exe -w %d -h %d -fps %d %s %s %s", w, h, fps, rendererFlag, m ? "-mouselook" : "", p ? "-perf" : "--no-perf");
+                    wsprintfA(cmd, ".\\dist\\raywin.exe -w %d -h %d -fps %d %s %s", w, h, fps, m ? "-mouselook" : "", p ? "-perf" : "--no-perf");
                 }
 
                 STARTUPINFOA si; PROCESS_INFORMATION pi;
