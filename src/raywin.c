@@ -12,6 +12,9 @@ int SCREEN_HEIGHT = DEFAULT_SCREEN_HEIGHT;
 // FPS target (default 60 FPS)
 int TARGET_FPS_VALUE = 60;
 
+// Fullscreen mode
+int fullscreenMode = 0;
+
 // Back buffer for double buffering
 HDC backDC = NULL;
 HBITMAP backBMP = NULL;
@@ -134,6 +137,11 @@ void parseLaunchArgs(void) {
             tok = strtok(NULL, " \t\r\n");
             continue;
         }
+        if (strcmp(tok, "-fullscreen") == 0 || strcmp(tok, "--fullscreen") == 0) {
+            fullscreenMode = 1;
+            tok = strtok(NULL, " \t\r\n");
+            continue;
+        }
         tok = strtok(NULL, " \t\r\n");
     }
     free(buf);
@@ -175,6 +183,27 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     POINT pt = { (rc.right-rc.left)/2, (rc.bottom-rc.top)/2 };
                     ClientToScreen(hwnd, &pt);
                     SetCursorPos(pt.x, pt.y);
+                }
+            }
+            if (wParam == 'F') {
+                // Toggle fullscreen
+                fullscreenMode = !fullscreenMode;
+                if (fullscreenMode) {
+                    // Switch to fullscreen
+                    SetWindowLong(hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 
+                        GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), 
+                        SWP_FRAMECHANGED);
+                    ShowWindow(hwnd, SW_MAXIMIZE);
+                } else {
+                    // Switch to windowed
+                    SetWindowLong(hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW);
+                    RECT windowRect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+                    AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
+                    SetWindowPos(hwnd, HWND_NOTOPMOST, CW_USEDEFAULT, CW_USEDEFAULT,
+                        windowRect.right - windowRect.left, windowRect.bottom - windowRect.top,
+                        SWP_FRAMECHANGED);
+                    ShowWindow(hwnd, SW_RESTORE);
                 }
             }
             break;
@@ -265,26 +294,40 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         return 0;
     }
 
-    // Calculate window size including borders
-    RECT windowRect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
-    AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
-    
     char windowTitle[256];
     if (simpleShadingMode) {
-        wsprintfA(windowTitle, "Advanced Raycasting Engine [PERF] [Software] [%d FPS] - WASD/Arrows to move, Shift to run", TARGET_FPS_VALUE);
+        wsprintfA(windowTitle, "Advanced Raycasting Engine [PERF] [Software] [%d FPS] - WASD/Arrows to move, Shift to run, F for fullscreen", TARGET_FPS_VALUE);
     } else {
-        wsprintfA(windowTitle, "Advanced Raycasting Engine [Software] [%d FPS] - WASD/Arrows to move, Shift to run", TARGET_FPS_VALUE);
+        wsprintfA(windowTitle, "Advanced Raycasting Engine [Software] [%d FPS] - WASD/Arrows to move, Shift to run, F for fullscreen", TARGET_FPS_VALUE);
     }
     
-    HWND hwnd = CreateWindowEx(
-        0,
-        g_szClassName,
-        windowTitle,
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        windowRect.right - windowRect.left,
-        windowRect.bottom - windowRect.top,
-        NULL, NULL, hInstance, NULL);
+    HWND hwnd;
+    if (fullscreenMode) {
+        // Fullscreen mode
+        hwnd = CreateWindowEx(
+            0,
+            g_szClassName,
+            windowTitle,
+            WS_POPUP | WS_VISIBLE,
+            0, 0,
+            GetSystemMetrics(SM_CXSCREEN),
+            GetSystemMetrics(SM_CYSCREEN),
+            NULL, NULL, hInstance, NULL);
+    } else {
+        // Windowed mode
+        RECT windowRect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+        AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
+        
+        hwnd = CreateWindowEx(
+            0,
+            g_szClassName,
+            windowTitle,
+            WS_OVERLAPPEDWINDOW,
+            CW_USEDEFAULT, CW_USEDEFAULT,
+            windowRect.right - windowRect.left,
+            windowRect.bottom - windowRect.top,
+            NULL, NULL, hInstance, NULL);
+    }
 
     if (hwnd == NULL) {
         MessageBox(NULL, "Window Creation Failed!", "Error!", MB_ICONEXCLAMATION | MB_OK);

@@ -24,7 +24,7 @@
 #define TEX_WIDTH 64
 #define TEX_HEIGHT 64
 #define FOV (M_PI / 3.0)  // 60 degrees
-#define MOVE_SPEED 0.04
+#define MOVE_SPEED 0.08
 #define ROT_SPEED 0.05
 #define MAX_DISTANCE 20.0
 #define RAY_STEP 0.01
@@ -35,8 +35,8 @@
 
 // Movement physics
 #define ACCEL 0.06
-#define FRICTION 0.82
-#define SLIDE_FRICTION 0.95
+#define FRICTION 0.92
+#define SLIDE_FRICTION 0.98
 #define MAX_SPEED 0.22
 #define RUN_MULTIPLIER 1.6
 

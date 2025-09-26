@@ -31,6 +31,9 @@ static void updateTrigValues(void) {
 }
 
 void updatePlayerMovement(int keys[256]) {
+    // Store old angle to detect rotation
+    double oldAngle = playerAngle;
+    
     // Handle continuous input with improved responsiveness
     if (keys[VK_LEFT]) {
         playerAngle -= rotationSpeed;
@@ -41,8 +44,21 @@ void updatePlayerMovement(int keys[256]) {
         updateTrigValues(); // Update trig values when angle changes
     }
     
-    // Acceleration-based movement (supports sliding) - using precomputed values
+    // Rotate existing velocity when player turns to maintain movement direction
+    if (playerAngle != oldAngle) {
+        double angleDiff = playerAngle - oldAngle;
+        double cosDiff = cos(angleDiff);
+        double sinDiff = sin(angleDiff);
+        double newVelX = velX * cosDiff - velY * sinDiff;
+        double newVelY = velX * sinDiff + velY * cosDiff;
+        velX = newVelX;
+        velY = newVelY;
+    }
+    
+    // Proper velocity-based movement system
     double accel = ACCEL * (keys[VK_SHIFT] ? RUN_MULTIPLIER : 1.0);
+    
+    // Apply acceleration based on input
     if (keys[VK_UP] || keys['W']) {
         velX += cosAngle * accel;
         velY += sinAngle * accel;
@@ -60,6 +76,11 @@ void updatePlayerMovement(int keys[256]) {
         velY += sinAngle270 * accel;
     }
 
+    // Apply friction
+    double fr = (keys[VK_UP]||keys['W']||keys[VK_DOWN]||keys['S']||keys['A']||keys['D']) ? SLIDE_FRICTION : FRICTION;
+    velX *= fr;
+    velY *= fr;
+
     // Clamp speed
     double speed = sqrt(velX*velX + velY*velY);
     double maxSpd = MAX_SPEED * (keys[VK_SHIFT] ? RUN_MULTIPLIER : 1.0);
@@ -68,18 +89,13 @@ void updatePlayerMovement(int keys[256]) {
         velY = velY * (maxSpd / speed);
     }
 
-    // Apply friction (lighter when input is held for slide feel)
-    double fr = (keys[VK_UP]||keys['W']||keys[VK_DOWN]||keys['S']||keys['A']||keys['D']) ? SLIDE_FRICTION : FRICTION;
-    velX *= fr;
-    velY *= fr;
-
-    // Move with collision and wall sliding
+    // Move with collision detection
     double newX = playerX + velX;
     double newY = playerY + velY;
     if (canMoveTo(newX, playerY)) playerX = newX; else velX = 0;
     if (canMoveTo(playerX, newY)) playerY = newY; else velY = 0;
     
-    // Speed handled via accel/max speed; maintain legacy variable for any other uses
+    // Maintain legacy variable for any other uses
     playerSpeed = MOVE_SPEED * (keys[VK_SHIFT] ? 2.0 : 1.0);
 }
 

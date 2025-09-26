@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define IDC_WIDTH   1001
 #define IDC_HEIGHT  1002
@@ -11,6 +12,7 @@
 #define IDC_MAPFILE  1007
 #define IDC_MAPCOMBO 1008
 #define IDC_FPS     1009
+#define IDC_FULLSCREEN 1010
 
 static const int kResolutions[][2] = {
     {640, 480}, {800, 600}, {1024, 768}, {1280, 720}, {1280, 800}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3840, 2160}
@@ -20,14 +22,92 @@ static const int kFPSOptions[] = {30, 60, 90, 120, 144};
 
 static const char* kRendererOptions[] = {"Software"};
 
-static HWND hWidthCombo, hHeightCombo, hMouseCheck, hPerfCheck, hPlayBtn, hEditBtn, hMapFileBtn, hMapCombo, hFPSCombo;
+static HWND hWidthCombo, hHeightCombo, hMouseCheck, hPerfCheck, hPlayBtn, hEditBtn, hMapFileBtn, hMapCombo, hFPSCombo, hFullscreenCheck;
 static char selectedMapFile[MAX_PATH] = "";
 static char mapFiles[32][MAX_PATH];
 static int numMaps = 0;
 
+// Launcher settings structure
+typedef struct {
+    int width;
+    int height;
+    int fps;
+    int mouseLook;
+    int performance;
+    int fullscreen;
+    char mapFile[MAX_PATH];
+} LauncherSettings;
+
+static LauncherSettings settings = {
+    .width = 1024,
+    .height = 768,
+    .fps = 60,
+    .mouseLook = 0,
+    .performance = 0,
+    .fullscreen = 0,
+    .mapFile = ""
+};
+
 static void addItem(HWND combo, const char *text, int value) {
     SendMessageA(combo, CB_ADDSTRING, 0, (LPARAM)text);
     SendMessageA(combo, CB_SETITEMDATA, SendMessageA(combo, CB_GETCOUNT, 0, 0)-1, (LPARAM)value);
+}
+
+// Simple JSON-like settings file functions
+static void saveSettings() {
+    FILE *file = fopen("src\\launcher_settings.json", "w");
+    if (!file) return;
+    
+    fprintf(file, "{\n");
+    fprintf(file, "  \"width\": %d,\n", settings.width);
+    fprintf(file, "  \"height\": %d,\n", settings.height);
+    fprintf(file, "  \"fps\": %d,\n", settings.fps);
+    fprintf(file, "  \"mouseLook\": %d,\n", settings.mouseLook);
+    fprintf(file, "  \"performance\": %d,\n", settings.performance);
+    fprintf(file, "  \"fullscreen\": %d,\n", settings.fullscreen);
+    fprintf(file, "  \"mapFile\": \"%s\"\n", settings.mapFile);
+    fprintf(file, "}\n");
+    
+    fclose(file);
+}
+
+static void loadSettings() {
+    FILE *file = fopen("src\\launcher_settings.json", "r");
+    if (!file) return;
+    
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        // Remove whitespace and newlines
+        char *trimmed = line;
+        while (*trimmed == ' ' || *trimmed == '\t' || *trimmed == '\n' || *trimmed == '\r') trimmed++;
+        
+        if (strstr(trimmed, "\"width\"")) {
+            sscanf(trimmed, "\"width\": %d,", &settings.width);
+        } else if (strstr(trimmed, "\"height\"")) {
+            sscanf(trimmed, "\"height\": %d,", &settings.height);
+        } else if (strstr(trimmed, "\"fps\"")) {
+            sscanf(trimmed, "\"fps\": %d,", &settings.fps);
+        } else if (strstr(trimmed, "\"mouseLook\"")) {
+            sscanf(trimmed, "\"mouseLook\": %d,", &settings.mouseLook);
+        } else if (strstr(trimmed, "\"performance\"")) {
+            sscanf(trimmed, "\"performance\": %d,", &settings.performance);
+        } else if (strstr(trimmed, "\"fullscreen\"")) {
+            sscanf(trimmed, "\"fullscreen\": %d,", &settings.fullscreen);
+        } else if (strstr(trimmed, "\"mapFile\"")) {
+            char *start = strchr(trimmed, '"');
+            if (start) {
+                start++; // Skip opening quote
+                char *end = strrchr(start, '"');
+                if (end) {
+                    *end = '\0'; // Null terminate
+                    strncpy(settings.mapFile, start, MAX_PATH - 1);
+                    settings.mapFile[MAX_PATH - 1] = '\0';
+                }
+            }
+        }
+    }
+    
+    fclose(file);
 }
 
 static void scanMapsDirectory() {
@@ -77,8 +157,27 @@ static void populateMapCombo() {
         SendMessageA(hMapCombo, CB_ADDSTRING, 0, (LPARAM)mapFiles[i]);
     }
     if (numMaps > 0) {
-        SendMessageA(hMapCombo, CB_SETCURSEL, 0, 0);
-        strcpy(selectedMapFile, mapFiles[0]);
+        // Try to select the saved map file
+        int savedIndex = -1;
+        if (strlen(settings.mapFile) > 0) {
+            for (int i = 0; i < numMaps; i++) {
+                if (strcmp(mapFiles[i], settings.mapFile) == 0) {
+                    savedIndex = i;
+                    break;
+                }
+            }
+        }
+        
+        if (savedIndex >= 0) {
+            SendMessageA(hMapCombo, CB_SETCURSEL, savedIndex, 0);
+            strcpy(selectedMapFile, mapFiles[savedIndex]);
+        } else {
+            // Saved map not found, use first available map
+            SendMessageA(hMapCombo, CB_SETCURSEL, 0, 0);
+            strcpy(selectedMapFile, mapFiles[0]);
+            // Update settings to reflect the actual selected map
+            strcpy(settings.mapFile, selectedMapFile);
+        }
     }
 }
 
@@ -102,9 +201,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             hMapCombo = CreateWindowA("COMBOBOX", "", WS_VISIBLE|WS_CHILD|CBS_DROPDOWNLIST, 80, 170, 120, 200, hwnd, (HMENU)IDC_MAPCOMBO, NULL, NULL);
             hMouseCheck = CreateWindowA("BUTTON", "Enable Mouse Look", WS_VISIBLE|WS_CHILD|BS_AUTOCHECKBOX, 20, 205, 180, 22, hwnd, (HMENU)IDC_MOUSE, NULL, NULL);
             hPerfCheck  = CreateWindowA("BUTTON", "Performance Mode", WS_VISIBLE|WS_CHILD|BS_AUTOCHECKBOX, 20, 230, 180, 22, hwnd, (HMENU)IDC_PERF, NULL, NULL);
-            hPlayBtn = CreateWindowA("BUTTON", "Play", WS_VISIBLE|WS_CHILD|BS_DEFPUSHBUTTON, 20, 265, 180, 28, hwnd, (HMENU)IDC_PLAY, NULL, NULL);
-            hEditBtn = CreateWindowA("BUTTON", "Map Editor", WS_VISIBLE|WS_CHILD, 20, 300, 180, 26, hwnd, (HMENU)IDC_EDITMAP, NULL, NULL);
-            hMapFileBtn = CreateWindowA("BUTTON", "Refresh Maps", WS_VISIBLE|WS_CHILD, 20, 335, 180, 26, hwnd, (HMENU)IDC_MAPFILE, NULL, NULL);
+            hFullscreenCheck = CreateWindowA("BUTTON", "Fullscreen", WS_VISIBLE|WS_CHILD|BS_AUTOCHECKBOX, 20, 255, 180, 22, hwnd, (HMENU)IDC_FULLSCREEN, NULL, NULL);
+            hPlayBtn = CreateWindowA("BUTTON", "Play", WS_VISIBLE|WS_CHILD|BS_DEFPUSHBUTTON, 20, 290, 180, 28, hwnd, (HMENU)IDC_PLAY, NULL, NULL);
+            hEditBtn = CreateWindowA("BUTTON", "Map Editor", WS_VISIBLE|WS_CHILD, 20, 325, 180, 26, hwnd, (HMENU)IDC_EDITMAP, NULL, NULL);
+            hMapFileBtn = CreateWindowA("BUTTON", "Refresh Maps", WS_VISIBLE|WS_CHILD, 20, 360, 180, 26, hwnd, (HMENU)IDC_MAPFILE, NULL, NULL);
 
             char buf[32];
             for (int i = 0; i < (int)(sizeof(kResolutions)/sizeof(kResolutions[0])); ++i) {
@@ -113,15 +213,36 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 wsprintfA(buf, "%d", kResolutions[i][1]);
                 addItem(hHeightCombo, buf, kResolutions[i][1]);
             }
-            SendMessageA(hWidthCombo, CB_SETCURSEL, 2, 0);  // 1024
-            SendMessageA(hHeightCombo, CB_SETCURSEL, 2, 0); // 768
+            // Load settings first
+            loadSettings();
+            
+            // Set combo box selections based on saved settings
+            for (int i = 0; i < (int)(sizeof(kResolutions)/sizeof(kResolutions[0])); ++i) {
+                if (kResolutions[i][0] == settings.width) {
+                    SendMessageA(hWidthCombo, CB_SETCURSEL, i, 0);
+                    break;
+                }
+            }
+            for (int i = 0; i < (int)(sizeof(kResolutions)/sizeof(kResolutions[0])); ++i) {
+                if (kResolutions[i][1] == settings.height) {
+                    SendMessageA(hHeightCombo, CB_SETCURSEL, i, 0);
+                    break;
+                }
+            }
             
             // Add FPS options
             for (int i = 0; i < (int)(sizeof(kFPSOptions)/sizeof(kFPSOptions[0])); ++i) {
                 wsprintfA(buf, "%d FPS", kFPSOptions[i]);
                 addItem(hFPSCombo, buf, kFPSOptions[i]);
+                if (kFPSOptions[i] == settings.fps) {
+                    SendMessageA(hFPSCombo, CB_SETCURSEL, i, 0);
+                }
             }
-            SendMessageA(hFPSCombo, CB_SETCURSEL, 1, 0); // 60 FPS default
+            
+            // Set checkbox states
+            SendMessageA(hMouseCheck, BM_SETCHECK, settings.mouseLook ? BST_CHECKED : BST_UNCHECKED, 0);
+            SendMessageA(hPerfCheck, BM_SETCHECK, settings.performance ? BST_CHECKED : BST_UNCHECKED, 0);
+            SendMessageA(hFullscreenCheck, BM_SETCHECK, settings.fullscreen ? BST_CHECKED : BST_UNCHECKED, 0);
             
             
             // Scan and populate maps
@@ -137,14 +258,25 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 int renderer = 0; // Always software
                 int m = (int)SendMessageA(hMouseCheck, BM_GETCHECK, 0, 0);
                 int p = (int)SendMessageA(hPerfCheck,  BM_GETCHECK, 0, 0);
+                int f = (int)SendMessageA(hFullscreenCheck, BM_GETCHECK, 0, 0);
+                
+                // Save current settings before launching
+                settings.width = w;
+                settings.height = h;
+                settings.fps = fps;
+                settings.mouseLook = m;
+                settings.performance = p;
+                settings.fullscreen = f;
+                strcpy(settings.mapFile, selectedMapFile);
+                saveSettings();
 
                 char cmd[512];
                 const char* rendererFlag = ""; // No renderer flag needed
                 // Always pass an explicit perf flag so the game doesn't auto-override
                 if (strlen(selectedMapFile) > 0) {
-                    wsprintfA(cmd, ".\\dist\\raywin.exe -map maps\\%s -w %d -h %d -fps %d %s %s", selectedMapFile, w, h, fps, m ? "-mouselook" : "", p ? "-perf" : "--no-perf");
+                    wsprintfA(cmd, ".\\dist\\raywin.exe -map maps\\%s -w %d -h %d -fps %d %s %s %s", selectedMapFile, w, h, fps, m ? "-mouselook" : "", p ? "-perf" : "--no-perf", f ? "-fullscreen" : "");
                 } else {
-                    wsprintfA(cmd, ".\\dist\\raywin.exe -w %d -h %d -fps %d %s %s", w, h, fps, m ? "-mouselook" : "", p ? "-perf" : "--no-perf");
+                    wsprintfA(cmd, ".\\dist\\raywin.exe -w %d -h %d -fps %d %s %s %s", w, h, fps, m ? "-mouselook" : "", p ? "-perf" : "--no-perf", f ? "-fullscreen" : "");
                 }
 
                 STARTUPINFOA si; PROCESS_INFORMATION pi;
@@ -179,14 +311,35 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     int idx = (int)SendMessageA(hMapCombo, CB_GETCURSEL, 0, 0);
                     if (idx >= 0 && idx < numMaps) {
                         strcpy(selectedMapFile, mapFiles[idx]);
+                        // Save map selection immediately
+                        strcpy(settings.mapFile, selectedMapFile);
+                        saveSettings();
                     }
                 }
             }
             break;
         }
-        case WM_DESTROY:
+        case WM_DESTROY: {
+            // Save current settings before exiting
+            int w = getSelectedValue(hWidthCombo);
+            int h = getSelectedValue(hHeightCombo);
+            int fps = getSelectedValue(hFPSCombo);
+            int m = (int)SendMessageA(hMouseCheck, BM_GETCHECK, 0, 0);
+            int p = (int)SendMessageA(hPerfCheck, BM_GETCHECK, 0, 0);
+            int f = (int)SendMessageA(hFullscreenCheck, BM_GETCHECK, 0, 0);
+            
+            settings.width = w;
+            settings.height = h;
+            settings.fps = fps;
+            settings.mouseLook = m;
+            settings.performance = p;
+            settings.fullscreen = f;
+            strcpy(settings.mapFile, selectedMapFile);
+            saveSettings();
+            
             PostQuitMessage(0);
             break;
+        }
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
@@ -199,7 +352,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPSTR lpCmdLine, int nC
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     if (!RegisterClassA(&wc)) return 0;
-    HWND hwnd = CreateWindowA(wc.lpszClassName, "RayWhen Launcher", WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX, CW_USEDEFAULT, CW_USEDEFAULT, 240, 410, NULL, NULL, hInstance, NULL);
+    HWND hwnd = CreateWindowA(wc.lpszClassName, "RayWhen Launcher", WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX, CW_USEDEFAULT, CW_USEDEFAULT, 240, 420, NULL, NULL, hInstance, NULL);
     if (!hwnd) return 0;
     ShowWindow(hwnd, SW_SHOWDEFAULT);
     UpdateWindow(hwnd);
