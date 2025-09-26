@@ -7,6 +7,22 @@ if not exist "dist\maps" mkdir dist\maps
 echo Directories ready!
 echo.
 
+echo === Compiler Selection ===
+echo Please choose your compiler:
+echo 1. Tiny C Compiler (TCC) - Fast compilation
+echo 2. Clang - Optimized performance
+echo 3. GCC - GNU Compiler Collection
+echo.
+set /p choice="Enter your choice (1-3): "
+
+if "%choice%"=="1" goto use_tcc
+if "%choice%"=="2" goto use_clang
+if "%choice%"=="3" goto use_gcc
+echo Invalid choice! Please run the script again and select 1, 2, or 3.
+pause
+exit /b 1
+
+:use_tcc
 echo === Checking TCC Compiler ===
 tcc -version >nul 2>&1
 if %errorlevel% neq 0 (
@@ -15,8 +31,6 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 echo TCC compiler found!
-echo.
-
 echo === Compiling Advanced Raycasting Engine with TCC ===
 if not exist "src\raywin.c" (
     echo Error: src\raywin.c not found!
@@ -24,6 +38,47 @@ if not exist "src\raywin.c" (
     exit /b 1
 )
 tcc src\raywin.c src\texture.c src\map.c src\player.c src\enemy.c src\renderer.c -o dist\raywin.exe -luser32 -lgdi32
+goto compile_launcher
+
+:use_clang
+echo === Checking Clang Compiler ===
+clang --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Error: Clang compiler not found! Please install LLVM Clang.
+    echo Download from: https://releases.llvm.org/download.html
+    pause
+    exit /b 1
+)
+echo Clang compiler found!
+echo === Compiling Advanced Raycasting Engine with Clang ===
+if not exist "src\raywin.c" (
+    echo Error: src\raywin.c not found!
+    pause
+    exit /b 1
+)
+clang src\raywin.c src\texture.c src\map.c src\player.c src\enemy.c src\renderer.c -o dist\raywin.exe -luser32 -lgdi32 -O2 -Wall
+goto compile_launcher
+
+:use_gcc
+echo === Checking GCC Compiler ===
+gcc --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Error: GCC compiler not found! Please install MinGW-w64 or MSYS2.
+    echo Download from: https://www.msys2.org/ or https://mingw-w64.org/
+    pause
+    exit /b 1
+)
+echo GCC compiler found!
+echo === Compiling Advanced Raycasting Engine with GCC ===
+if not exist "src\raywin.c" (
+    echo Error: src\raywin.c not found!
+    pause
+    exit /b 1
+)
+gcc src\raywin.c src\texture.c src\map.c src\player.c src\enemy.c src\renderer.c -o dist\raywin.exe -luser32 -lgdi32 -O2 -Wall
+goto compile_launcher
+
+:compile_launcher
 
 if %errorlevel% neq 0 (
     echo Compile failed!
@@ -48,7 +103,14 @@ if not exist "src\launcher.c" (
     pause
     exit /b 1
 )
-tcc src\launcher.c -o dist\launcher.exe -luser32 -lgdi32
+
+if "%choice%"=="1" (
+    tcc src\launcher.c -o dist\launcher.exe -luser32 -lgdi32
+) else if "%choice%"=="2" (
+    clang src\launcher.c -o dist\launcher.exe -luser32 -lgdi32 -O2 -Wall
+) else if "%choice%"=="3" (
+    gcc src\launcher.c -o dist\launcher.exe -luser32 -lgdi32 -O2 -Wall
+)
 
 echo === Compiling Map Editor ===
 if not exist "src\mapedit.c" (
@@ -56,7 +118,14 @@ if not exist "src\mapedit.c" (
     pause
     exit /b 1
 )
-tcc src\mapedit.c -o dist\mapedit.exe -luser32 -lgdi32 -lcomdlg32
+
+if "%choice%"=="1" (
+    tcc src\mapedit.c -o dist\mapedit.exe -luser32 -lgdi32 -lcomdlg32
+) else if "%choice%"=="2" (
+    clang src\mapedit.c -o dist\mapedit.exe -luser32 -lgdi32 -lcomdlg32 -O2 -Wall
+) else if "%choice%"=="3" (
+    gcc src\mapedit.c -o dist\mapedit.exe -luser32 -lgdi32 -lcomdlg32 -O2 -Wall
+)
 
 
 if %errorlevel% neq 0 (
