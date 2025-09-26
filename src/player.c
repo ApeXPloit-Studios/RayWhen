@@ -31,9 +31,6 @@ static void updateTrigValues(void) {
 }
 
 void updatePlayerMovement(int keys[256]) {
-    // Store old angle to detect rotation
-    double oldAngle = playerAngle;
-    
     // Handle continuous input with improved responsiveness
     if (keys[VK_LEFT]) {
         playerAngle -= rotationSpeed;
@@ -42,17 +39,6 @@ void updatePlayerMovement(int keys[256]) {
     if (keys[VK_RIGHT]) {
         playerAngle += rotationSpeed;
         updateTrigValues(); // Update trig values when angle changes
-    }
-    
-    // Rotate existing velocity when player turns to maintain movement direction
-    if (playerAngle != oldAngle) {
-        double angleDiff = playerAngle - oldAngle;
-        double cosDiff = cos(angleDiff);
-        double sinDiff = sin(angleDiff);
-        double newVelX = velX * cosDiff - velY * sinDiff;
-        double newVelY = velX * sinDiff + velY * cosDiff;
-        velX = newVelX;
-        velY = newVelY;
     }
     
     // Proper velocity-based movement system
@@ -101,8 +87,12 @@ void updatePlayerMovement(int keys[256]) {
 
 void handleMouseLook(HWND hwnd, int dx, int dy) {
     if (mouseLookEnabled) {
-        playerAngle += dx * MOUSE_SENS;
-        updateTrigValues(); // Update trig values when angle changes
+        // Smooth mouse turning - similar to arrow key turning
+        if (dx != 0) {
+            playerAngle += dx * MOUSE_SENS;
+            updateTrigValues(); // Update trig values when angle changes
+        }
+        
         pitchOffset += -(double)dy * PITCH_SENS;
         // clamp pitch offset to avoid excessive tilt
         double maxPitch = SCREEN_HEIGHT * 0.45;

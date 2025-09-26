@@ -152,6 +152,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static int keys[256] = {0};
     static double lastPlayerX = 8.5, lastPlayerY = 8.5, lastPlayerAngle = 0.0;
     static int flashFrames = 0;
+    static int mouseDx = 0, mouseDy = 0;
     
     switch (msg) {
         case WM_SIZE: {
@@ -221,6 +222,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_TIMER: {
             double oldX = playerX, oldY = playerY, oldAngle = playerAngle;
             
+            // Process accumulated mouse movement
+            if (mouseLookEnabled && (mouseDx != 0 || mouseDy != 0)) {
+                handleMouseLook(hwnd, mouseDx, mouseDy);
+                mouseDx = 0;
+                mouseDy = 0;
+            }
+            
             // Update player movement
             updatePlayerMovement(keys);
             
@@ -241,8 +249,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 int dx = winPt.x - cx;
                 int dy = winPt.y - cy;
                 if (dx != 0 || dy != 0) {
-                    handleMouseLook(hwnd, dx, dy);
-                    InvalidateRect(hwnd, NULL, FALSE);
+                    // Store mouse delta for processing in timer
+                    mouseDx += dx;
+                    mouseDy += dy;
                     // recenter cursor
                     POINT cpt = { cx, cy }; ClientToScreen(hwnd, &cpt);
                     SetCursorPos(cpt.x, cpt.y);
@@ -344,6 +353,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
+    
+    // Hide cursor if mouse look is enabled
+    if (mouseLookEnabled) {
+        ShowCursor(FALSE);
+    }
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0) > 0) {

@@ -30,7 +30,7 @@
 #define RAY_STEP 0.01
 #define TARGET_FPS 30
 #define FRAME_TIME (1000 / TARGET_FPS)  // 33ms for 30 FPS
-#define MOUSE_SENS 0.006
+#define MOUSE_SENS 0.01
 #define PITCH_SENS 0.4   // pixels per mouse unit (scaled later)
 
 // Movement physics

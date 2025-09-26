@@ -1,8 +1,8 @@
 {
-  "width": 640,
-  "height": 480,
+  "width": 1024,
+  "height": 768,
   "fps": 60,
-  "mouseLook": 0,
+  "mouseLook": 1,
   "performance": 0,
   "fullscreen": 0,
   "mapFile": "arena.rwm"
