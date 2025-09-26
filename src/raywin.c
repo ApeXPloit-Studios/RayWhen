@@ -4,6 +4,7 @@
 #include "player.h"
 #include "enemy.h"
 #include "renderer.h"
+#include <psapi.h>
 
 // Global screen dimensions (will be updated on resize)
 int SCREEN_WIDTH = DEFAULT_SCREEN_WIDTH;
@@ -14,6 +15,18 @@ int TARGET_FPS_VALUE = 60;
 
 // Fullscreen mode
 int fullscreenMode = 0;
+
+// Debug mode
+int debugModeEnabled = 0;
+
+// Current map name for debug display
+static char currentMapName[MAX_PATH] = "Default";
+
+// FPS tracking for debug display
+static DWORD lastFrameTime = 0;
+static int frameCount = 0;
+static int currentFPS = 0;
+static DWORD fpsUpdateTime = 0;
 
 // Back buffer for double buffering
 HDC backDC = NULL;
@@ -102,10 +115,21 @@ void parseLaunchArgs(void) {
             tok = strtok(NULL, " \t\r\n");
             continue;
         }
+        if (strcmp(tok, "-debug") == 0 || strcmp(tok, "--debug") == 0) {
+            debugModeEnabled = 1;
+            tok = strtok(NULL, " \t\r\n");
+            continue;
+        }
         if (strcmp(tok, "-map") == 0) {
             char *next = strtok(NULL, " \t\r\n");
             if (next) {
                 loadMapFromFile(next);
+                // Extract filename for debug display
+                char *filename = strrchr(next, '\\');
+                if (filename) filename++;
+                else filename = next;
+                strncpy(currentMapName, filename, MAX_PATH - 1);
+                currentMapName[MAX_PATH - 1] = '\0';
             }
             tok = strtok(NULL, " \t\r\n");
             continue;
@@ -266,6 +290,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             ensureBackBuffer(hwnd);
             // Draw into back buffer
             renderScene(backDC);
+            // Draw debug info if enabled
+            if (debugModeEnabled) {
+                drawDebugInfo(backDC);
+            }
             // Blit to screen
             BitBlt(hdc, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, backDC, 0, 0, SRCCOPY);
             EndPaint(hwnd, &ps);
@@ -282,6 +310,70 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 1;
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+// Debug info drawing function
+void drawDebugInfo(HDC hdc) {
+    DWORD currentTime = GetTickCount();
+    
+    // Update FPS counter
+    frameCount++;
+    if (currentTime - fpsUpdateTime >= 1000) { // Update every second
+        currentFPS = frameCount;
+        frameCount = 0;
+        fpsUpdateTime = currentTime;
+    }
+    
+    // Get memory usage
+    PROCESS_MEMORY_COUNTERS pmc;
+    SIZE_T memoryUsage = 0;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        memoryUsage = pmc.WorkingSetSize / 1024; // Convert to KB
+    }
+    
+    // Get CPU usage (simplified - just show frame time)
+    DWORD frameTime = currentTime - lastFrameTime;
+    lastFrameTime = currentTime;
+    
+    // Set text color to white
+    SetTextColor(hdc, RGB(255, 255, 255));
+    SetBkMode(hdc, TRANSPARENT);
+    
+    // Draw debug info in top-left corner
+    char debugText[512];
+    sprintf(debugText, 
+        "FPS: %d\n"
+        "Memory: %zu KB\n"
+        "Frame Time: %lu ms\n"
+        "Resolution: %dx%d\n"
+        "Player: (%.1f, %.1f)\n"
+        "Angle: %.1f°\n"
+        "Map: %s",
+        currentFPS,
+        memoryUsage,
+        frameTime,
+        SCREEN_WIDTH, SCREEN_HEIGHT,
+        playerX, playerY,
+        playerAngle * 180.0 / 3.14159,
+        currentMapName
+    );
+    
+    // Draw text with black outline for better visibility
+    RECT textRect = {10, 10, SCREEN_WIDTH - 10, SCREEN_HEIGHT - 10};
+    
+    // Draw black outline
+    SetTextColor(hdc, RGB(0, 0, 0));
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            if (x == 0 && y == 0) continue;
+            RECT outlineRect = {textRect.left + x, textRect.top + y, textRect.right + x, textRect.bottom + y};
+            DrawTextA(hdc, debugText, -1, &outlineRect, DT_LEFT | DT_TOP | DT_NOCLIP);
+        }
+    }
+    
+    // Draw white text
+    SetTextColor(hdc, RGB(255, 255, 255));
+    DrawTextA(hdc, debugText, -1, &textRect, DT_LEFT | DT_TOP | DT_NOCLIP);
 }
 
 // Entry point

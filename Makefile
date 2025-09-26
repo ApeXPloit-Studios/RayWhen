@@ -4,7 +4,7 @@
 # Compiler and flags
 CC = gcc
 CFLAGS = -O2 -Wall -Wextra -std=c99
-LDFLAGS = -luser32 -lgdi32 -lcomdlg32
+LDFLAGS = -luser32 -lgdi32 -lcomdlg32 -lpsapi
 
 # Directories
 SRC_DIR = src

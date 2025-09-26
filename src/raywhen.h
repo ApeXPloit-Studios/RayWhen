@@ -64,5 +64,6 @@ static inline uint32_t colorref_to_bgra(COLORREF c) {
 // Function declarations
 void ensureBackBuffer(HWND hwnd);
 void parseLaunchArgs(void);
+void drawDebugInfo(HDC hdc);
 
 #endif // RAYWHEN_H
