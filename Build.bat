@@ -3,6 +3,7 @@ echo === Creating Directories ===
 if not exist "maps" mkdir maps
 if not exist "src" mkdir src
 if not exist "dist" mkdir dist
+if not exist "dist\maps" mkdir dist\maps
 echo Directories ready!
 echo.
 
