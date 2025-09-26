@@ -21,7 +21,7 @@ uint32_t *backPixels = NULL; // BGRA top-down
 double *depthBuffer = NULL;
 int depthW = 0;
 
-void ensureBackBuffer(HWND hwnd) {
+static void ensureBackBuffer(HWND hwnd) {
     if (!hwnd) return;
     if (backDC && (backW == SCREEN_WIDTH) && (backH == SCREEN_HEIGHT)) return;
 
@@ -66,7 +66,7 @@ void ensureBackBuffer(HWND hwnd) {
 }
 
 // Command-line parsing for launcher options
-void parseLaunchArgs(void) {
+static void parseLaunchArgs(void) {
     char *cmd = GetCommandLineA();
     if (!cmd) return;
     // Simple space-delimited parse; our args do not require quotes

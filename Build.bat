@@ -22,7 +22,7 @@ if not exist "src\raywin.c" (
     pause
     exit /b 1
 )
-tcc src\raywin.c -o dist\raywin.exe -luser32 -lgdi32
+tcc src\raywin.c src\texture.c src\map.c src\player.c src\enemy.c src\renderer.c -o dist\raywin.exe -luser32 -lgdi32
 
 if %errorlevel% neq 0 (
     echo Compile failed!
@@ -52,7 +52,7 @@ tcc src\launcher.c -o dist\launcher.exe -luser32 -lgdi32
 echo === Compiling Map Editor ===
 if not exist "src\mapedit.c" (
     echo Error: src\mapedit.c not found!
-    pauseqqqqqqqqqqqqq
+    pause
     exit /b 1
 )
 tcc src\mapedit.c -o dist\mapedit.exe -luser32 -lgdi32 -lcomdlg32
