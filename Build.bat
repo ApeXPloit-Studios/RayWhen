@@ -18,36 +18,17 @@ echo.
 
 echo === Compiler Selection ===
 echo Please choose your compiler:
-echo 1. Tiny C Compiler (TCC) - Fast compilation
-echo 2. Clang - Optimized performance
-echo 3. GCC - GNU Compiler Collection
+echo 1. Clang - Fast compilation with good optimization
+echo 2. GCC - GNU Compiler Collection with mature optimization
 echo.
-set /p choice="Enter your choice (1-3): "
+set /p choice="Enter your choice (1-2): "
 
-if "%choice%"=="1" goto use_tcc
-if "%choice%"=="2" goto use_clang
-if "%choice%"=="3" goto use_gcc
-echo Invalid choice! Please run the script again and select 1, 2, or 3.
+if "%choice%"=="1" goto use_clang
+if "%choice%"=="2" goto use_gcc
+echo Invalid choice! Please run the script again and select 1 or 2.
 pause
 exit /b 1
 
-:use_tcc
-echo === Checking TCC Compiler ===
-tcc -version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Error: TCC compiler not found! Please install Tiny C Compiler.
-    pause
-    exit /b 1
-)
-echo TCC compiler found!
-echo === Compiling Advanced Raycasting Engine with TCC ===
-if not exist "src\raywin.c" (
-    echo Error: src\raywin.c not found!
-    pause
-    exit /b 1
-)
-tcc src\raywin.c src\texture.c src\map.c src\player.c src\enemy.c src\renderer.c -o dist\raywin.exe -luser32 -lgdi32
-goto compile_launcher
 
 :use_clang
 echo === Checking Clang Compiler ===
@@ -114,10 +95,8 @@ if not exist "src\launcher.c" (
 )
 
 if "%choice%"=="1" (
-    tcc src\launcher.c -o dist\launcher.exe -luser32 -lgdi32
-) else if "%choice%"=="2" (
     clang src\launcher.c -o dist\launcher.exe -luser32 -lgdi32 -O2 -Wall
-) else if "%choice%"=="3" (
+) else if "%choice%"=="2" (
     gcc src\launcher.c -o dist\launcher.exe -luser32 -lgdi32 -O2 -Wall
 )
 
@@ -129,10 +108,8 @@ if not exist "src\mapedit.c" (
 )
 
 if "%choice%"=="1" (
-    tcc src\mapedit.c -o dist\mapedit.exe -luser32 -lgdi32 -lcomdlg32
-) else if "%choice%"=="2" (
     clang src\mapedit.c -o dist\mapedit.exe -luser32 -lgdi32 -lcomdlg32 -O2 -Wall
-) else if "%choice%"=="3" (
+) else if "%choice%"=="2" (
     gcc src\mapedit.c -o dist\mapedit.exe -luser32 -lgdi32 -lcomdlg32 -O2 -Wall
 )
 
