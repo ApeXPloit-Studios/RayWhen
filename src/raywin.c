@@ -4,6 +4,7 @@
 #include "player.h"
 #include "enemy.h"
 #include "renderer.h"
+#include "dx11_renderer.h"
 
 // Global screen dimensions (will be updated on resize)
 int SCREEN_WIDTH = DEFAULT_SCREEN_WIDTH;
@@ -134,6 +135,18 @@ void parseLaunchArgs(void) {
             tok = strtok(NULL, " \t\r\n");
             continue;
         }
+        if (strcmp(tok, "-renderer") == 0 || strcmp(tok, "--renderer") == 0) {
+            char *next = strtok(NULL, " \t\r\n");
+            if (next) {
+                if (strcmp(next, "dx11") == 0) {
+                    setRenderer(RENDERER_DX11);
+                } else if (strcmp(next, "software") == 0) {
+                    setRenderer(RENDERER_SOFTWARE);
+                }
+            }
+            tok = strtok(NULL, " \t\r\n");
+            continue;
+        }
         tok = strtok(NULL, " \t\r\n");
     }
     free(buf);
@@ -234,6 +247,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         } break;
 
         case WM_DESTROY:
+            // Cleanup DirectX 11 resources
+            if (currentRenderer == RENDERER_DX11) {
+                cleanupDX11Renderer();
+            }
+            
+            // Cleanup software renderer resources
             if (depthBuffer) { free(depthBuffer); depthBuffer = NULL; depthW = 0; }
             PostQuitMessage(0);
             return 0;
@@ -269,10 +288,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
     
     char windowTitle[256];
+    const char* rendererName = getRendererName(currentRenderer);
     if (simpleShadingMode) {
-        wsprintfA(windowTitle, "Advanced Raycasting Engine [PERF] [%d FPS] - WASD/Arrows to move, Shift to run", TARGET_FPS_VALUE);
+        wsprintfA(windowTitle, "Advanced Raycasting Engine [PERF] [%s] [%d FPS] - WASD/Arrows to move, Shift to run", rendererName, TARGET_FPS_VALUE);
     } else {
-        wsprintfA(windowTitle, "Advanced Raycasting Engine [%d FPS] - WASD/Arrows to move, Shift to run", TARGET_FPS_VALUE);
+        wsprintfA(windowTitle, "Advanced Raycasting Engine [%s] [%d FPS] - WASD/Arrows to move, Shift to run", rendererName, TARGET_FPS_VALUE);
     }
     
     HWND hwnd = CreateWindowEx(
@@ -291,6 +311,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     }
 
     ensureBackBuffer(hwnd);
+
+    // Initialize DirectX 11 renderer if selected
+    if (currentRenderer == RENDERER_DX11) {
+        if (!initDX11Renderer(hwnd)) {
+            // Fallback to software renderer if DX11 fails
+            setRenderer(RENDERER_SOFTWARE);
+            wsprintfA(windowTitle, "Advanced Raycasting Engine [Software] [%d FPS] - WASD/Arrows to move, Shift to run", TARGET_FPS_VALUE);
+            SetWindowText(hwnd, windowTitle);
+        }
+    }
 
     // Performance mode is only set via command line arguments, no auto-scaling
 

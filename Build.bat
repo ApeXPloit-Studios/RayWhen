@@ -22,7 +22,7 @@ if not exist "src\raywin.c" (
     pause
     exit /b 1
 )
-tcc src\raywin.c src\texture.c src\map.c src\player.c src\enemy.c src\renderer.c -o dist\raywin.exe -luser32 -lgdi32
+tcc src\raywin.c src\texture.c src\map.c src\player.c src\enemy.c src\renderer.c src\dx11_renderer.c -o dist\raywin.exe -luser32 -lgdi32
 
 if %errorlevel% neq 0 (
     echo Compile failed!
