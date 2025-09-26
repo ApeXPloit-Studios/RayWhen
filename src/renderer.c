@@ -11,10 +11,30 @@ extern COLORREF wallColors[];
 int simpleShadingMode = 0;
 int perfExplicitlySet = 0; // set to 1 if -perf/--no-perf provided
 
-// Improved DDA raycasting algorithm
+// No adaptive quality - performance mode is only set via command line
+
+// Improved DDA raycasting algorithm with optimized trigonometric calculations
 RayResult castRay(double angle) {
-    double sinA = sin(angle);
-    double cosA = cos(angle);
+    // Use fast approximation for sin/cos if angle is close to common values
+    double sinA, cosA;
+    
+    // Check for common angles to avoid expensive trig calculations
+    if (fabs(angle) < 0.001) {
+        sinA = 0.0;
+        cosA = 1.0;
+    } else if (fabs(angle - M_PI/2) < 0.001) {
+        sinA = 1.0;
+        cosA = 0.0;
+    } else if (fabs(angle - M_PI) < 0.001) {
+        sinA = 0.0;
+        cosA = -1.0;
+    } else if (fabs(angle - 3*M_PI/2) < 0.001) {
+        sinA = -1.0;
+        cosA = 0.0;
+    } else {
+        sinA = sin(angle);
+        cosA = cos(angle);
+    }
     
     double rayPosX = playerX;
     double rayPosY = playerY;

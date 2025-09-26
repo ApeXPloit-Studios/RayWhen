@@ -9,6 +9,9 @@
 int SCREEN_WIDTH = DEFAULT_SCREEN_WIDTH;
 int SCREEN_HEIGHT = DEFAULT_SCREEN_HEIGHT;
 
+// FPS target (default 60 FPS)
+int TARGET_FPS_VALUE = 60;
+
 // Back buffer for double buffering
 HDC backDC = NULL;
 HBITMAP backBMP = NULL;
@@ -22,46 +25,46 @@ double *depthBuffer = NULL;
 int depthW = 0;
 
 void ensureBackBuffer(HWND hwnd) {
-    if (!hwnd) return;
-    if (backDC && (backW == SCREEN_WIDTH) && (backH == SCREEN_HEIGHT)) return;
+	if (!hwnd) return;
+	if (backDC && (backW == SCREEN_WIDTH) && (backH == SCREEN_HEIGHT)) return;
 
-    // Cleanup existing
-    if (backDC) {
-        if (backOldBMP) SelectObject(backDC, backOldBMP);
-        if (backBMP) DeleteObject(backBMP);
-        DeleteDC(backDC);
-        backDC = NULL;
-        backBMP = NULL;
-        backOldBMP = NULL;
-    }
+	// Cleanup existing
+	if (backDC) {
+		if (backOldBMP) SelectObject(backDC, backOldBMP);
+		if (backBMP) DeleteObject(backBMP);
+		DeleteDC(backDC);
+		backDC = NULL;
+		backBMP = NULL;
+		backOldBMP = NULL;
+	}
 
-    HDC wndDC = GetDC(hwnd);
-    backDC = CreateCompatibleDC(wndDC);
-    BITMAPINFO bmi;
-    ZeroMemory(&bmi, sizeof(bmi));
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = SCREEN_WIDTH;
-    // Negative height for top-down DIB so y=0 is top
-    bmi.bmiHeader.biHeight = -SCREEN_HEIGHT;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-    void *bits = NULL;
-    backBMP = CreateDIBSection(wndDC, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
-    backPixels = (uint32_t*)bits;
-    backOldBMP = (HBITMAP)SelectObject(backDC, backBMP);
-    ReleaseDC(hwnd, wndDC);
-    backW = SCREEN_WIDTH;
-    backH = SCREEN_HEIGHT;
+	HDC wndDC = GetDC(hwnd);
+	backDC = CreateCompatibleDC(wndDC);
+	BITMAPINFO bmi;
+	ZeroMemory(&bmi, sizeof(bmi));
+	bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+	bmi.bmiHeader.biWidth = SCREEN_WIDTH;
+	// Negative height for top-down DIB so y=0 is top
+	bmi.bmiHeader.biHeight = -SCREEN_HEIGHT;
+	bmi.bmiHeader.biPlanes = 1;
+	bmi.bmiHeader.biBitCount = 32;
+	bmi.bmiHeader.biCompression = BI_RGB;
+	void *bits = NULL;
+	backBMP = CreateDIBSection(wndDC, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
+	backPixels = (uint32_t*)bits;
+	backOldBMP = (HBITMAP)SelectObject(backDC, backBMP);
+	ReleaseDC(hwnd, wndDC);
+	backW = SCREEN_WIDTH;
+	backH = SCREEN_HEIGHT;
 
-    // (Re)allocate depth buffer to match current width
-    if (depthW != SCREEN_WIDTH) {
-        if (depthBuffer) {
-            free(depthBuffer);
-            depthBuffer = NULL;
-        }
-        depthBuffer = (double*)malloc(sizeof(double) * SCREEN_WIDTH);
-        depthW = SCREEN_WIDTH;
+	// (Re)allocate depth buffer to match current width
+	if (depthW != SCREEN_WIDTH) {
+		if (depthBuffer) {
+			free(depthBuffer);
+			depthBuffer = NULL;
+		}
+		depthBuffer = (double*)malloc(sizeof(double) * SCREEN_WIDTH);
+		depthW = SCREEN_WIDTH;
     }
 }
 
@@ -118,6 +121,15 @@ void parseLaunchArgs(void) {
             if (next) {
                 int h = atoi(next);
                 if (h >= MIN_SCREEN_HEIGHT && h <= 2160) SCREEN_HEIGHT = h;
+            }
+            tok = strtok(NULL, " \t\r\n");
+            continue;
+        }
+        if (strcmp(tok, "-fps") == 0 || strcmp(tok, "--fps") == 0) {
+            char *next = strtok(NULL, " \t\r\n");
+            if (next) {
+                int fps = atoi(next);
+                if (fps >= 30 && fps <= 144) TARGET_FPS_VALUE = fps;
             }
             tok = strtok(NULL, " \t\r\n");
             continue;
@@ -256,10 +268,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     RECT windowRect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
     AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
     
+    char windowTitle[256];
+    if (simpleShadingMode) {
+        wsprintfA(windowTitle, "Advanced Raycasting Engine [PERF] [%d FPS] - WASD/Arrows to move, Shift to run", TARGET_FPS_VALUE);
+    } else {
+        wsprintfA(windowTitle, "Advanced Raycasting Engine [%d FPS] - WASD/Arrows to move, Shift to run", TARGET_FPS_VALUE);
+    }
+    
     HWND hwnd = CreateWindowEx(
         0,
         g_szClassName,
-        simpleShadingMode ? "Advanced Raycasting Engine [PERF] - WASD/Arrows to move, Shift to run" : "Advanced Raycasting Engine - WASD/Arrows to move, Shift to run",
+        windowTitle,
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT,
         windowRect.right - windowRect.left,
@@ -273,14 +292,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     ensureBackBuffer(hwnd);
 
-    // Auto-enable perf mode at high res only if not explicitly set via args
-    if (!perfExplicitlySet && (SCREEN_WIDTH * SCREEN_HEIGHT >= 1920 * 1080)) {
-        simpleShadingMode = 1;
-        SetWindowText(hwnd, "Advanced Raycasting Engine [PERF] - WASD/Arrows to move, Shift to run");
-    }
+    // Performance mode is only set via command line arguments, no auto-scaling
 
-    // Set up timer for smooth input handling (30 FPS)
-    SetTimer(hwnd, 1, FRAME_TIME, NULL); // 30 FPS
+    // Set up timer for smooth input handling (dynamic FPS)
+    int timerInterval = 1000 / TARGET_FPS_VALUE;
+    SetTimer(hwnd, 1, timerInterval, NULL);
     
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);

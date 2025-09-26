@@ -20,14 +20,14 @@
 #define TEX_WIDTH 64
 #define TEX_HEIGHT 64
 #define FOV (M_PI / 3.0)  // 60 degrees
-#define MOVE_SPEED 0.03
-#define ROT_SPEED 0.03
+#define MOVE_SPEED 0.04
+#define ROT_SPEED 0.05
 #define MAX_DISTANCE 20.0
 #define RAY_STEP 0.01
 #define TARGET_FPS 30
 #define FRAME_TIME (1000 / TARGET_FPS)  // 33ms for 30 FPS
-#define MOUSE_SENS 0.004
-#define PITCH_SENS 0.5   // pixels per mouse unit (scaled later)
+#define MOUSE_SENS 0.006
+#define PITCH_SENS 0.4   // pixels per mouse unit (scaled later)
 
 // Movement physics
 #define ACCEL 0.06
